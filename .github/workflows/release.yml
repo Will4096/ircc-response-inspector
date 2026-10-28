@@ -46,7 +46,6 @@ jobs:
           node privacy-tests.mjs
 
       - name: Verify version, archive and notes
-        env:
         run: |
           set -euo pipefail
           VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8")).version')"
