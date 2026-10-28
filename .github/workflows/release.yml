@@ -2,6 +2,10 @@ name: Publish release
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release.yml'
     tags:
       - 'v*'
 
@@ -24,6 +28,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve release tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8")).version')"
+          if [ "$REF_TYPE" = tag ]; then TAG="$REF_NAME"; else TAG="v$VERSION"; fi
+          printf 'RELEASE_TAG=%s\n' "$TAG" >> "$GITHUB_ENV"
+
       - name: Run regression and privacy checks
         run: |
           node tests.mjs
@@ -33,7 +47,6 @@ jobs:
 
       - name: Verify version, archive and notes
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8")).version')"
@@ -45,12 +58,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
-            echo 'Release already exists; refusing to overwrite it.' >&2
-            exit 1
+            echo 'Release already exists; leaving its notes and assets unchanged.'
+            exit 0
           fi
           gh release create "$RELEASE_TAG" \
             "downloads/ircc-response-inspector-$RELEASE_TAG.zip" \
