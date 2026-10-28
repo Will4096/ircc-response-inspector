@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "IRCC Response Inspector (Unofficial)"
+  },
+  "extensionDescription": {
+    "message": "View and compare your IRCC Tracker progress and History locally. Unofficial tool; not affiliated with the Government of Canada."
+  },
+  "extensionAction": {
+    "message": "IRCC Tracker — view progress"
+  }
+}

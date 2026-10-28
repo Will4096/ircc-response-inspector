@@ -1,0 +1,11 @@
+{
+  "extensionName": {
+    "message": "IRCC 进度查询助手（非官方）"
+  },
+  "extensionDescription": {
+    "message": "在本机查看和对比 IRCC Tracker 申请进度、History 与原始状态。非官方工具，与加拿大政府无隶属关系。"
+  },
+  "extensionAction": {
+    "message": "IRCC Tracker — 查看进度"
+  }
+}

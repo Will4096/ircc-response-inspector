@@ -1,0 +1,21 @@
+# Browser profiles, local credentials and exported personal data must stay private.
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+node_modules/
+.DS_Store
+Thumbs.db
+.codex/
+.agents/
+private/
+local-data/
+exports/
+captures/
+screenshots/
+qa-preview/
+ircc-*.json
+*.log
+dist/
+public-upload/
