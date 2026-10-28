@@ -34,7 +34,7 @@ Official references (checked 2026-10-28):
 
 ## License
 
-No open-source license has been selected by the owner. Public repository visibility is not a grant of an MIT or other open-source license. Do not add one without the owner's choice.
+The owner selected the MIT License on 2026-10-28. Include the complete LICENSE and copyright notice in source and installation distributions. Do not remove the notice from modified copies.
 
 ## GitHub Releases
 

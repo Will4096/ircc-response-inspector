@@ -41,7 +41,7 @@ Read [Privacy policy / 隐私政策](PRIVACY.md), [Security / 安全说明](SECU
 
 ## Development / 开发
 
-Version: 3.4.0. No third-party runtime dependencies. With Node.js 22 or later:
+Version: 3.4.1. No third-party runtime dependencies. With Node.js 22 or later:
 
 ~~~sh
 node tests.mjs
@@ -63,4 +63,4 @@ Use this repository's Issues page. Include the extension/browser version and rep
 
 ## License / 许可
 
-No open-source license has been selected by the owner. / 仓库所有者尚未选定开源许可证。
+[MIT License](LICENSE) · Copyright (c) 2026 Will4096. Free to use, modify and redistribute under the license terms. / 采用 MIT 许可证，可按许可条款使用、修改和分发，须保留版权和许可声明。
