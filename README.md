@@ -1,47 +1,55 @@
 # IRCC Response Inspector
 
-![Icon](icons/icon-128.png)
+[简体中文](README.md) · [English](README.en.md)
 
-**Unofficial Chrome extension · 本机处理 · Chinese / English**
+![扩展图标](icons/icon-128.png)
 
-An independent tool for viewing your own IRCC Tracker progress, per-applicant History, raw Security status codes and changes since your previous successful check. Not affiliated with IRCC or the Government of Canada. It does not predict decisions or interpret undocumented status codes.
+**非官方 Chrome 扩展 · 本机处理 · MIT 开源**
 
-独立开发的 IRCC Tracker 查询辅助扩展，可查看分申请人进度、History、Security 原始状态及较上次成功查询的变化。与 IRCC、加拿大政府无隶属关系，不预测审批结果，不猜译未公开状态代码。
+将 IRCC Tracker 的申请进度、分申请人 History、Security 原始状态和上次查询对比整理到一个界面。无需自己打开开发者工具抓包或翻找 JSON；用户仍需自行登录、核对申请信息并手动输入邮箱验证码。
 
-## Install / 安装
+本工具与 IRCC、加拿大政府无隶属关系，不预测审批结果，也不猜译未公开状态代码。
 
-1. Download the named installation ZIP from [Releases](https://github.com/Will4096/ircc-response-inspector/releases) and extract it. / 从 Releases 下载带版本号的安装 ZIP 并解压。 The downloads directory is also available as a mirror. / downloads 目录保留一份镜像。
-2. Open chrome://extensions and enable Developer mode. / 打开 chrome://extensions，开启开发者模式。
-3. Choose Load unpacked and select the extracted folder containing manifest.json. / 点击“加载已解压的扩展程序”，选择包含 manifest.json 的解压目录。
-4. Pin the extension if desired. / 可将扩展固定到工具栏。
+## 主要功能
 
-This is a GitHub-distributed unpacked extension, not a Chrome Web Store approval. / 此处提供 GitHub 分发的解压安装版，不代表已经通过 Chrome 应用商店审核。
+- 多份申请资料分别保存，选择 profile 后辅助填写官方表单。
+- 分申请人查看生物识别、体检、资格审核、背景调查、待办与完整 History。
+- 原样展示 Security 状态代码，保留历史条目。
+- 与同一 profile 上次完整成功查询对比，标记变化和新增 History；失败查询不会覆盖基准。
+- 默认中文，可切换英文；中文保留 Surname / Last name、Given name 等原网站字段名。
+- 按需导出本地 JSON，支持删除单份资料及清除全部本地数据。
 
-## Use / 使用
+## 安装
 
-- Open Tracker and sign in yourself. / 自行打开 Tracker 并完成登录。
-- Use Manage applications to save a profile; confirm the selected profile before filling. Surname / Last name, Given name and other official field names are retained in Chinese. / 通过“管理申请”保存资料，填写前核对所选申请；中文保留原网站字段名。
-- Review the form, then submit it on the website. Manually copy the email verification code and choose Verify and check. The extension does not access your mailbox. / 核对资料后在网站提交，手动粘贴邮箱验证码并点击“验证并查询”；扩展不读取邮箱。
-- Check each person's progress and expand History. Export only when you need a local JSON copy. / 按申请人查看进度和 History，需要时导出本地 JSON。
-- Complete successful checks are compared per profile. Failed or interrupted checks do not replace the baseline. / 完整成功查询按 profile 对比，失败或中断不会覆盖基准。
+1. 前往 [Releases](https://github.com/Will4096/ircc-response-inspector/releases)，下载带版本号的安装 ZIP；不要选自动生成的 Source code 压缩包。
+2. 解压安装包，打开 Chrome 的 **chrome://extensions** 页面。
+3. 开启“开发者模式”，点击“加载已解压的扩展程序”。
+4. 选择包含 **manifest.json** 的解压目录，可将扩展固定到工具栏。
 
-Chinese is the default. Switch in the popup header or Extension options → Settings. Preferences are local and synchronized across open extension pages. / 默认中文，可在顶部或扩展选项 → 设置中切换英文。
+这是 GitHub 分发的解压安装版，不代表已通过 Chrome 应用商店审核。已有安装更新文件后需重新加载扩展，并刷新 Tracker。[downloads](downloads) 目录保留安装包镜像。
 
-## Privacy and permissions / 隐私与权限
+## 使用
 
-No developer backend, telemetry, ads or external AI. Profiles and comparison baselines use local Chrome storage; query caches use session storage. Required form data is sent only through the official IRCC page. Results and exported files can still contain sensitive personal information.
+1. 打开 Tracker，自行完成登录。
+2. 通过“管理申请”保存资料，确认当前申请，再辅助填写。
+3. 在官方网站核对资料后提交，手动粘贴邮件验证码，点击“验证并查询”。扩展不读取邮箱。
+4. 查看进度，展开各申请人的 History，需要时导出本地记录。
 
-没有开发者服务器、遥测、广告或外部 AI。申请资料及比较基准保存在本机，查询缓存使用会话存储。查询所需信息通过 IRCC 官方页面提交。结果和导出仍可能包含个人敏感信息。
+语言可在主面板顶部或扩展选项的“设置”中切换。偏好保存在本机，已打开的扩展页面会同步更新。
 
-The debugger permission supports reliable form input and reading the selected Tracker tab's responses. Chrome may show a debugging banner. The extension stops on completion, error, timeout or navigation away. Do not open DevTools on that tab during a check.
+## 隐私与权限
 
-调试权限用于可靠填写表单及读取所选 Tracker 标签页响应。Chrome 可能显示调试提示，操作结束、失败、超时或离开 Tracker 后会断开；查询时不要同时打开该标签页的 DevTools。
+没有开发者服务器、广告、遥测或外部 AI。申请资料、偏好和比较基准保存在本机 Chrome 存储，查询缓存使用会话存储，不使用 Chrome Sync。查询所需信息仍通过 IRCC 官方页面提交。
 
-Read [Privacy policy / 隐私政策](PRIVACY.md), [Security / 安全说明](SECURITY.md) and [Publishing / 发布说明](PUBLISHING.md). Delete a profile and its data from options, or use Clear local data to clear all extension data. Downloaded exports must be deleted separately.
+调试权限用于可靠填写表单及读取所选 Tracker 标签页的响应。Chrome 可能显示调试提示；查询结束、失败、超时或离开 Tracker 后断开。查询时请勿同时打开该标签页的 DevTools。
 
-## Development / 开发
+资料、History 和导出仍可能包含个人敏感信息，本地保存不等于加密。删除申请可清理其缓存及基准；“清除本地数据”可清除全部扩展数据。已下载的导出文件需单独删除。
 
-Version: 3.4.1. No third-party runtime dependencies. With Node.js 22 or later:
+[隐私政策](PRIVACY.md) · [安全说明](SECURITY.md) · [发布说明](PUBLISHING.md)
+
+## 开发与验证
+
+当前版本：3.4.1。无第三方运行时依赖。使用 Node.js 22 或更高版本：
 
 ~~~sh
 node tests.mjs
@@ -51,16 +59,12 @@ node privacy-tests.mjs
 node scripts/build-release.mjs
 ~~~
 
-The build uses an explicit runtime-file allowlist and writes a ZIP with a SHA-256 checksum. Automated tests use synthetic data; no real account or verification code is shipped. The official site's changing forms and authenticated flow still need live testing by the user.
+构建使用运行文件白名单，生成安装 ZIP 及 SHA-256 校验文件。自动测试使用合成数据，不包含真实账号或验证码。官方页面可能变化，真实登录流程仍需用户实测。
 
-构建使用文件白名单并生成 SHA-256 校验值。自动测试只使用合成数据，发布内容不包含真实账号或验证码。官方页面可能变化，真实登录查询仍需用户实测。
+## 问题反馈
 
-## Feedback / 反馈
+请在 [Issues](https://github.com/Will4096/ircc-response-inspector/issues) 中提供扩展版本、浏览器版本及复现步骤。不要公开姓名、UCI、申请编号、出生日期、验证码、cookie、token、真实截图或未脱敏的导出。
 
-Use this repository's Issues page. Include the extension/browser version and reproduction steps. Do not post UCI, application numbers, birth dates, verification codes, cookies, tokens, real screenshots or unredacted exports.
+## 许可证
 
-请在 Issues 中提供版本和复现步骤，不要发布编号、出生日期、验证码、cookie、token、真实截图或未脱敏导出。
-
-## License / 许可
-
-[MIT License](LICENSE) · Copyright (c) 2026 Will4096. Free to use, modify and redistribute under the license terms. / 采用 MIT 许可证，可按许可条款使用、修改和分发，须保留版权和许可声明。
+采用 [MIT 许可证](LICENSE)，版权所有者为 Will4096。可按许可条款使用、修改和分发，须保留版权和许可声明。

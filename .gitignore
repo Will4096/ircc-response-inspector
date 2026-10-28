@@ -19,3 +19,6 @@ ircc-*.json
 *.log
 dist/
 public-upload/
+
+# Promotional assets belong in the separate private media repository.
+social/
