@@ -1,0 +1,61 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'Will4096/ircc-response-inspector'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Pinned to the verified official actions/checkout v4 commit.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Run regression and privacy checks
+        run: |
+          node tests.mjs
+          node comparison-tests.mjs
+          node i18n-tests.mjs
+          node privacy-tests.mjs
+
+      - name: Verify version, archive and notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("manifest.json", "utf8")).version')"
+          test "$RELEASE_TAG" = "v$VERSION"
+          test -f "release-notes/$RELEASE_TAG.md"
+          (cd downloads && sha256sum --check "ircc-response-inspector-v$VERSION.zip.sha256")
+
+      - name: Create release with verified assets, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite it.' >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" \
+            "downloads/ircc-response-inspector-$RELEASE_TAG.zip" \
+            "downloads/ircc-response-inspector-$RELEASE_TAG.zip.sha256" \
+            --repo "$GH_REPO" --verify-tag --draft \
+            --title "IRCC Response Inspector $RELEASE_TAG" \
+            --notes-file "release-notes/$RELEASE_TAG.md"
+          gh release edit "$RELEASE_TAG" --repo "$GH_REPO" --draft=false --latest

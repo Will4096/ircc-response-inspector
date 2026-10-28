@@ -10,7 +10,7 @@ An independent tool for viewing your own IRCC Tracker progress, per-applicant Hi
 
 ## Install / 安装
 
-1. Download the runtime ZIP from this repository's downloads folder and extract it. / 从 downloads 目录下载运行 ZIP 并解压。
+1. Download the named installation ZIP from [Releases](https://github.com/Will4096/ircc-response-inspector/releases) and extract it. / 从 Releases 下载带版本号的安装 ZIP 并解压。 The downloads directory is also available as a mirror. / downloads 目录保留一份镜像。
 2. Open chrome://extensions and enable Developer mode. / 打开 chrome://extensions，开启开发者模式。
 3. Choose Load unpacked and select the extracted folder containing manifest.json. / 点击“加载已解压的扩展程序”，选择包含 manifest.json 的解压目录。
 4. Pin the extension if desired. / 可将扩展固定到工具栏。

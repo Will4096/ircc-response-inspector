@@ -35,3 +35,7 @@ Official references (checked 2026-10-28):
 ## License
 
 No open-source license has been selected by the owner. Public repository visibility is not a grant of an MIT or other open-source license. Do not add one without the owner's choice.
+
+## GitHub Releases
+
+Push a reviewed version tag matching manifest.json (for example v3.4.0). The pinned release workflow runs the four test suites, checks the committed installation ZIP checksum, uploads the ZIP and checksum to a draft Release, then publishes it. It uses only the job-scoped GITHUB_TOKEN with contents:write, no personal token or browser automation. Existing releases are never overwritten automatically. Store notes under release-notes/vX.Y.Z.md and add new paths to the source allowlist before staging.

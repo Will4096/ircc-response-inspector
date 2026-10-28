@@ -21,7 +21,7 @@ await fs.mkdir(path.join(root,'dist'),{recursive:true});await fs.writeFile(path.
 await fs.writeFile(path.join(root,'dist',filename+'.sha256'),createHash('sha256').update(zip).digest('hex')+'  '+filename+'\n');
 await fs.writeFile(path.join(root,'dist','runtime-files.json'),JSON.stringify(files,null,2)+'\n');
 // A second explicit allowlist stages only reviewable public source and docs.
-const source=[...files,'README.md','PRIVACY.md','PUBLISHING.md','SECURITY.md','QA-DESIGN.md','.gitignore','tests.mjs','comparison-tests.mjs','i18n-tests.mjs','privacy-tests.mjs','icons/icon.svg','icons/render-icons.ps1','scripts/build-release.mjs'];
+const source=[...files,'.github/workflows/release.yml','release-notes/v3.4.0.md','README.md','PRIVACY.md','PUBLISHING.md','SECURITY.md','QA-DESIGN.md','.gitignore','tests.mjs','comparison-tests.mjs','i18n-tests.mjs','privacy-tests.mjs','icons/icon.svg','icons/render-icons.ps1','scripts/build-release.mjs'];
 for(const file of source){const target=path.join(root,'public-upload',file);await fs.mkdir(path.dirname(target),{recursive:true});await fs.copyFile(path.join(root,file),target);}
 await fs.mkdir(path.join(root,'public-upload','downloads'),{recursive:true});
 await fs.copyFile(path.join(root,'dist',filename),path.join(root,'public-upload','downloads',filename));
