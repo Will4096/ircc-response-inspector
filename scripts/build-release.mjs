@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {deflateRawSync} from 'node:zlib';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'manifest.json'),'utf8'));
-const files=['LICENSE','manifest.json','autofill.js','background.js','comparison.js','domain.js','form.js','i18n.js','model.js','options.html','options.js','popup.css','popup.html','popup.js','privacy-data.js','privacy.html','privacy.css','profiles.js','scanner.js',
+const files=['LICENSE','manifest.json','autofill.js','background.js','comparison.js','domain.js','form.js','i18n.js','model.js','options.html','options.js','popup.css','popup.html','popup.js','mail-core.js','mail-assist.js','mail-content.js','mail-options.js','mail-popup.js','MAIL-SETUP.md','MAIL-SETUP.en.md','privacy-data.js','privacy.html','privacy.css','profiles.js','scanner.js',
   '_locales/zh_CN/messages.json','_locales/en/messages.json',...['16','24','32','48','128'].map(size=>'icons/icon-'+size+'.png')];
 function crc32(bytes){let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 const chunks=[],directory=[];let offset=0;
@@ -20,8 +20,9 @@ const zip=Buffer.concat([...chunks,central,end]);const filename='ircc-response-i
 await fs.mkdir(path.join(root,'dist'),{recursive:true});await fs.writeFile(path.join(root,'dist',filename),zip);
 await fs.writeFile(path.join(root,'dist',filename+'.sha256'),createHash('sha256').update(zip).digest('hex')+'  '+filename+'\n');
 await fs.writeFile(path.join(root,'dist','runtime-files.json'),JSON.stringify(files,null,2)+'\n');
+if(manifest.version_name?.includes('preview')){console.log('Built development preview '+filename+' ('+zip.length+' bytes). Native helper source is distributed separately under windows/.');process.exit(0);}
 // A second explicit allowlist stages only reviewable public source and docs.
-const source=[...files,'.github/workflows/release.yml','release-notes/v'+manifest.version+'.md','README.md','README.en.md','PRIVACY.md','PUBLISHING.md','SECURITY.md','QA-DESIGN.md','.gitignore','tests.mjs','comparison-tests.mjs','i18n-tests.mjs','privacy-tests.mjs','icons/icon.svg','icons/render-icons.ps1','scripts/build-release.mjs'];
+const source=[...files,'.github/workflows/release.yml','release-notes/v'+manifest.version+'.md','README.md','README.en.md','PRIVACY.md','PUBLISHING.md','SECURITY.md','QA-DESIGN.md','.gitignore','tests.mjs','comparison-tests.mjs','i18n-tests.mjs','privacy-tests.mjs','mail-tests.mjs','windows/install.ps1','windows/uninstall.ps1','windows/mail_host.py','windows/test_mail_host.py','windows/test-installer.ps1','icons/icon.svg','icons/render-icons.ps1','scripts/build-release.mjs'];
 for(const file of source){const target=path.join(root,'public-upload',file);await fs.mkdir(path.dirname(target),{recursive:true});await fs.copyFile(path.join(root,file),target);}
 await fs.mkdir(path.join(root,'public-upload','downloads'),{recursive:true});
 await fs.copyFile(path.join(root,'dist',filename),path.join(root,'public-upload','downloads',filename));

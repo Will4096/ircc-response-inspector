@@ -4,6 +4,16 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '本地数据已清除。请运行 Windows 卸载脚本清除残留邮箱授权。':'Local data cleared. Run the Windows uninstaller to remove remaining mailbox authorization.',
+    '申请资料和查询记录保存在本机，不上传给开发者。通过 IRCC 官网查询；可选邮箱辅助仅在开启后访问所选邮箱服务。':'Application details and query records stay on this device and are not uploaded to the developer. Queries use the official IRCC site; optional email assistance contacts the selected mail provider only when enabled.',
+    '邮箱验证码辅助（预览）':'Email code assistance (preview)',
+    '默认关闭。开启后按需读取匹配的验证邮件，确认后才提交；手动输入始终可用。':'Off by default. Reads matching messages when needed. Submission requires confirmation; manual entry remains available.',
+    '启用邮箱辅助':'Enable email assistance','邮箱类型':'Email provider','接收验证码的邮箱':'Verification email address',
+    'Gmail 需要配置 Google OAuth 客户端；只读授权可访问邮箱，不限于 IRCC 邮件。':'Gmail requires a Google OAuth client. Read-only authorization grants mailbox access, not just IRCC messages.',
+    '授权 Gmail':'Authorize Gmail','首次使用请运行 Windows 本机安装脚本，再填写 163 客户端授权码（不是登录密码）。':'Run the Windows helper installer first, then enter your 163 app password (not your sign-in password).',
+    '安装与授权说明':'Installation and authorization guide','163 客户端授权码':'163 app password','连接 163 并开启':'Connect 163 and enable','检查本机程序':'Check local helper',
+    '邮箱辅助不保存邮件正文或验证码，也不上传给开发者。163 授权码由 Windows 本机程序加密保存。':'Email assistance does not save message bodies or codes or upload them to the developer. The Windows helper encrypts the 163 app password locally.',
+    '保存邮箱设置':'Save email settings','断开并清除邮箱授权':'Disconnect and clear mailbox authorization',
     '非 IRCC 官方扩展，与加拿大政府无隶属关系。':'Unofficial extension. Not affiliated with IRCC or the Government of Canada.',
     '隐私政策':'Privacy policy','清除本地数据':'Clear local data','本地数据已清除。':'Local data cleared.',
     '清除所有本地申请资料、查询缓存及对比记录？已导出的文件不会删除。':'Clear all locally stored application profiles, query caches and comparison records? Exported files will not be deleted.',

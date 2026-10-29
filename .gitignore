@@ -22,3 +22,9 @@ public-upload/
 
 # Promotional assets belong in the separate private media repository.
 social/
+
+# Native helper build/test outputs and encrypted credentials
+__pycache__/
+*.pyc
+*.dpapi
+.tmp-mail-helper/

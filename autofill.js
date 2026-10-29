@@ -20,12 +20,14 @@
     }
     if(withSubmit){
       const button=document.createElement('button');button.type='button';button.textContent='Submit';button.style.cssText='background:#166b49;color:white;border:0;border-radius:6px;padding:12px 16px;font:600 16px system-ui;cursor:pointer';
-      button.onclick=()=>{
+      button.onclick=async()=>{
         if(button.disabled)return;
         const submit=document.getElementById('submitButton');
         if(location.pathname!=='/2/ast-search' || !submit){banner.remove();return;}
         if(submit.disabled)return;
-        button.disabled=true;submit.click();
+        button.disabled=true;
+        try{await chrome.runtime.sendMessage({action:'mailTrackRequest',applicationNumber:document.getElementById('applicationNumber')?.value || ''});}catch{}
+        submit.click();
         setTimeout(()=>{if(location.pathname==='/2/ast-search')button.disabled=false;},1500);
       };
       banner.append(button);

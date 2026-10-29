@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.4.1",
+  "version": "3.5.0",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
@@ -19,7 +19,8 @@
         "i18n.js",
         "form.js",
         "scanner.js",
-        "autofill.js"
+        "autofill.js",
+        "mail-content.js"
       ],
       "run_at": "document_idle"
     }
@@ -47,6 +48,14 @@
   },
   "default_locale": "zh_CN",
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'; base-uri 'none';"
-  }
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
+  },
+  "version_name": "3.5.0-mail-preview",
+  "optional_permissions": [
+    "identity",
+    "nativeMessaging"
+  ],
+  "optional_host_permissions": [
+    "https://gmail.googleapis.com/*"
+  ]
 }

@@ -1,5 +1,7 @@
 # IRCC Response Inspector
 
+> Development preview: `feature/mail-verification-windows`, not merged into main. Adds opt-in Gmail / 163 assistance with confirmation before submission. The 163 helper supports Windows only. See [setup guide](MAIL-SETUP.en.md). Live mailbox integration and release review remain pending; stable downloads below retain manual code entry.
+
 [English](README.en.md) · [简体中文](README.md)
 
 ![Extension icon](icons/icon-128.png)

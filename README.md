@@ -1,5 +1,7 @@
 # IRCC Response Inspector
 
+> 开发预览：当前分支 `feature/mail-verification-windows`，尚未合入主分支。新增默认关闭的 Gmail / 163 邮箱辅助，取码后需确认提交。163 仅支持 Windows 本机程序。参见 [安装与授权说明](MAIL-SETUP.md)。真实邮箱联调和发布审核尚未完成；下方正式版下载仍为稳定手动验证码版本。
+
 [简体中文](README.md) · [English](README.en.md)
 
 ![扩展图标](icons/icon-128.png)

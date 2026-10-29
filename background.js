@@ -5,6 +5,8 @@ importScripts('profiles.js');
 importScripts('comparison.js');
 importScripts('scanner.js');
 importScripts('privacy-data.js');
+importScripts('mail-core.js');
+importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
 // Remove the mailbox listener and metadata left by 3.1.0–3.1.2 on upgrade.
@@ -104,12 +106,17 @@ function findFields(value, path = '$', found = []) {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
     const id = sender.tab?.id ?? message.tabId;
+    if(message.action==='mailConfirm'){
+      if(!mailExtensionSender(sender) && !mailTrackerSender(sender))throw new Error('mail.permission');
+      message={...message,action:'verify',code:await mailTake(id,message)};
+    }else if(String(message.action).startsWith('mail'))return mailHandle(message,sender);
     if(message.action==='clearLocalData' || message.action==='removeProfile'){
       if(sender.tab && !String(sender.url || '').startsWith(chrome.runtime.getURL('')))throw new Error('请从扩展设置操作。');
       if(message.action==='clearLocalData'){
         for(const [tabId,state] of sessions)if(state.active)await finish(tabId,'stopped','已停止');
-        sessions.clear();await chrome.storage.local.clear();await chrome.storage.session.clear();return {ok:true};
+        const helperCleared=await mailForget();sessions.clear();await chrome.storage.local.clear();await chrome.storage.session.clear();return {ok:true,helperCleared};
       }
+      await mailCancelAll();
       const config=await chrome.storage.local.get(['applications','selectedApplicationId']);
       const applications=(config.applications || []).filter(item=>item.id!==message.profileId);
       await removeProfileData(message.profileId);
@@ -230,6 +237,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       return result;
     }
     if (message.action === 'verify' || message.action === 'start') {
+      if(message.action==='verify' && !message.candidateId)await mailCancel(id);
       if(message.action==='verify'){
         if(verificationLocks.has(id) || sessions.get(id)?.verificationSubmitting)throw new Error('正在验证，请稍候。');
         if(verificationLocks.has(id))throw new Error('正在验证，请稍候。');
