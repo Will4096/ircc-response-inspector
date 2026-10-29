@@ -1,19 +1,10 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><title data-i18n="IRCC 管理申请">IRCC 管理申请</title>
-<style>body{font:16px system-ui;max-width:800px;margin:40px auto;padding:20px;color:#163047}header{display:flex;align-items:center;justify-content:space-between;gap:20px}header select{width:auto;margin:0}label{display:block;margin:16px 0}input,select{display:block;width:100%;box-sizing:border-box;padding:10px;margin-top:5px}button{padding:10px;margin:8px 8px 8px 0}li{margin:10px 0}#message{white-space:pre-wrap}small{color:#52616c}.settings-panel{padding:12px 16px;background:#f5f7fa;border-radius:8px;margin:20px 0}.settings-panel select{max-width:240px}summary{cursor:pointer}input[type=checkbox]{display:inline;width:auto}</style></head>
-<body><header><h1 data-i18n="管理申请">管理申请</h1><select id="languageHeader" data-language aria-label="Language / 语言"><option value="zh">中文</option><option value="en">English</option></select></header>
+<link rel="stylesheet" href="options.css"></head>
+<body><header><h1 data-i18n="管理申请">管理申请</h1><div class="header-actions"><a class="nav-button" href="settings.html" data-i18n="设置">设置</a><select id="languageHeader" data-language aria-label="Language / 语言"><option value="zh">中文</option><option value="en">English</option></select></div></header>
 <p data-i18n="添加或编辑申请信息，用于自动填写 Tracker。">添加或编辑申请信息，用于自动填写 Tracker。</p>
 <p><small><strong data-i18n="隐私声明：">隐私声明：</strong><span data-i18n="申请资料和查询记录保存在本机，不上传给开发者。通过 IRCC 官网查询；可选邮箱辅助仅在开启后访问所选邮箱服务。">申请资料和查询记录保存在本机，不上传给开发者。通过 IRCC 官网查询；可选邮箱辅助仅在开启后访问所选邮箱服务。</span></small></p>
-<details id="extensionSettings" class="settings-panel" open><summary data-i18n="扩展设置（含邮箱验证码）">扩展设置（含邮箱验证码）</summary><label><span data-i18n="界面语言">界面语言</span><select id="languageSettings" data-language aria-label="Language / 语言"><option value="zh">中文</option><option value="en">English</option></select></label><label><input id="autoFill" type="checkbox"> <span data-i18n="自动填写所选申请">自动填写所选申请</span></label><fieldset class="settings-panel"><legend data-i18n="邮箱验证码辅助（预览）">邮箱验证码辅助（预览）</legend>
-<p data-i18n="默认关闭。开启后按需读取匹配的验证邮件，确认后才提交；手动输入始终可用。">默认关闭。开启后按需读取匹配的验证邮件，确认后才提交；手动输入始终可用。</p>
-<label><input id="mailEnabled" type="checkbox"> <span data-i18n="启用邮箱辅助">启用邮箱辅助</span></label>
-<label><span data-i18n="邮箱类型">邮箱类型</span><select id="mailProvider"><option value="gmail">Gmail · OAuth</option><option value="163">163 · Windows IMAP</option></select></label>
-<label id="mailEmailRow"><span data-i18n="接收验证码的邮箱">接收验证码的邮箱</span><input id="mailEmail" type="email" autocomplete="off"></label>
-<div id="gmailSettings" hidden><label>Google OAuth Client ID<input id="mailClientId" autocomplete="off"></label><p data-i18n="Gmail 需要配置 Google OAuth 客户端；只读授权可访问邮箱，不限于 IRCC 邮件。">Gmail 需要配置 Google OAuth 客户端；只读授权可访问邮箱，不限于 IRCC 邮件。</p><p>OAuth redirect URI: <code id="mailRedirect"></code></p><button id="mailAuthorize" type="button" data-mail-button data-i18n="授权 Gmail">授权 Gmail</button></div>
-<div id="neteaseSettings" hidden><p data-i18n="首次使用请运行 Windows 本机安装脚本，再填写 163 客户端授权码（不是登录密码）。">首次使用请运行 Windows 本机安装脚本，再填写 163 客户端授权码（不是登录密码）。</p><p>Extension ID: <code id="mailExtensionId"></code></p><p><a href="MAIL-SETUP.md" target="_blank" data-i18n="安装与授权说明">安装与授权说明</a></p><label><span data-i18n="163 客户端授权码">163 客户端授权码</span><input id="mailPassword" type="password" autocomplete="new-password"></label><button id="mailSetup163" type="button" data-mail-button data-i18n="连接 163 并开启">连接 163 并开启</button><button id="mailHelperStatus" type="button" data-mail-button data-i18n="检查本机程序">检查本机程序</button></div>
-<p data-i18n="邮箱辅助不保存邮件正文或验证码，也不上传给开发者。163 授权码由 Windows 本机程序加密保存。">邮箱辅助不保存邮件正文或验证码，也不上传给开发者。163 授权码由 Windows 本机程序加密保存。</p>
-<button id="mailSave" type="button" data-mail-button data-i18n="保存邮箱设置">保存邮箱设置</button><button id="mailDisconnect" type="button" data-mail-button data-i18n="断开并清除邮箱授权">断开并清除邮箱授权</button><p id="mailStatus" role="status"></p></fieldset>
-<p id="languageStatus" role="status"></p><p><a href="privacy.html" data-i18n="隐私政策">隐私政策</a></p><button id="clearData" type="button" data-i18n="清除本地数据">清除本地数据</button></details>
+
 <ul id="list"></ul><button id="new" type="button" data-i18n="新增申请">新增申请</button>
 <form id="form">
 <label><span data-i18n="申请名称">申请名称</span><input name="label" required maxlength="100" placeholder="例如：本人省提名申请" data-i18n-placeholder="例如：本人省提名申请"></label>
@@ -26,4 +17,4 @@
 <label><span data-i18n="出生日期（Date of birth）">出生日期（Date of birth）</span><input name="birthDate" type="date" required min="1900-01-01" max="9999-12-31"></label>
 <label><span data-i18n="出生国家（Country of birth，Tracker 英文名称）">出生国家（Country of birth，Tracker 英文名称）</span><input name="country" required placeholder="例如 China 或 China (Hong Kong SAR)" data-i18n-placeholder="例如 China 或 China (Hong Kong SAR)"></label>
 <button type="submit" data-i18n="保存申请">保存申请</button><button id="delete" type="button" disabled data-i18n="删除申请">删除申请</button>
-</form><p id="message" role="status"></p><script src="i18n.js"></script><script src="options.js"></script><script src="mail-options.js"></script></body></html>
+</form><p id="message" role="status"></p><script src="i18n.js"></script><script src="options.js"></script></body></html>

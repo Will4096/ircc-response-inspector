@@ -27,14 +27,14 @@ assert.equal(popup.c.I18n.message('张三 — Completed'),'张三 — Completed'
 assert.ok(popup.c.I18n.t(privacy).includes('stored only on this device'));
 const reopened=await surface();assert.equal(reopened.c.I18n.language,'en','Preference persists on reopen');
 // Every static label and explicitly translated UI fragment must have an English value.
-for(const file of ['popup.html','options.html']){
+for(const file of ['popup.html','options.html','settings.html']){
   const html=await read(file);
   for(const match of html.matchAll(/data-i18n(?:-title|-placeholder|-label)?="([^"]+)"/g))if(/[\u3400-\u9fff]/.test(match[1]))assert.notEqual(popup.c.I18n.t(match[1]),match[1],file+': '+match[1]);
-  assert.equal((html.match(/data-language/g) || []).length,file==='popup.html'?1:2,'Popup has only the header switch; extension options retain settings');
+  assert.equal((html.match(/data-language/g) || []).length,file==='settings.html'?2:1,'Header switches remain available; settings owns the preference control');
   if(file==='popup.html'){assert.ok(!html.includes('settings-panel'));assert.ok(!html.includes('languageSettings'));}
-  assert.ok(html.indexOf('src="i18n.js"')<html.indexOf('src="'+(file==='popup.html'?'popup.js':'options.js')+'"'));
+  assert.ok(html.indexOf('src="i18n.js"')<html.indexOf('src="'+(file==='popup.html'?'popup.js':file==='options.html'?'options.js':'settings.js')+'"'));
 }
-for(const file of ['popup.js','options.js'])for(const match of (await read(file)).matchAll(/t\('((?:\\.|[^'])*)'\)/g)){
+for(const file of ['popup.js','options.js','settings.js'])for(const match of (await read(file)).matchAll(/t\('((?:\\.|[^'])*)'\)/g)){
   const key=vm.runInNewContext("'"+match[1]+"'");
   if(/[\u3400-\u9fff]/.test(key))assert.notEqual(popup.c.I18n.t(key),key,file+': '+key);
 }
@@ -43,3 +43,5 @@ assert.ok(popup.c.I18n.t('生物识别').includes('Biometrics'));
 assert.ok((await read('options.html')).includes('Surname / Last name'));
 assert.ok((await read('options.html')).includes('Given name / First name'));
 console.log('PASS: Chinese default, English/Chinese switching, header/settings and cross-page synchronization, preference persistence, intact typed/user data, bilingual field names, translated errors and static/UI translation coverage.');
+
+assert.ok(!(await read('options.html')).includes('mailEnabled'));assert.ok(!(await read('options.html')).includes('clearData'));assert.ok((await read('settings.html')).includes('mailEnabled'));assert.equal(JSON.parse(await read('manifest.json')).options_page,'settings.html');

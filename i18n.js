@@ -4,6 +4,7 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    'IRCC 扩展设置':'IRCC Extension Settings',
     '扩展设置（含邮箱验证码）':'Extension settings (including email codes)',
     '本地数据已清除。请运行 Windows 卸载脚本清除残留邮箱授权。':'Local data cleared. Run the Windows uninstaller to remove remaining mailbox authorization.',
     '申请资料和查询记录保存在本机，不上传给开发者。通过 IRCC 官网查询；可选邮箱辅助仅在开启后访问所选邮箱服务。':'Application details and query records stay on this device and are not uploaded to the developer. Queries use the official IRCC site; optional email assistance contacts the selected mail provider only when enabled.',

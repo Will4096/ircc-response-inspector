@@ -6,7 +6,7 @@ Branch: `feature/mail-verification-windows`. Not merged into main or released. A
 
 ## Enable
 
-Load this branch as an unpacked development extension. Open extension options → Settings → Email code assistance. Choose a provider and enter the verification mailbox. Only one outstanding request per configured mailbox is retained. The extension must observe a matching Tracker application form submission; it does not guess a request timestamp from an already-open verification page. Submit the form again after enabling assistance.
+Load this branch as an unpacked development extension. Open header Settings (or Chrome extension options) → Email code assistance. Choose a provider and enter the verification mailbox. Only one outstanding request per configured mailbox is retained. The extension must observe a matching Tracker application form submission; it does not guess a request timestamp from an already-open verification page. Submit the form again after enabling assistance.
 
 ## Gmail
 

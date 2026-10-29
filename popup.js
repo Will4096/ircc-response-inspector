@@ -138,6 +138,7 @@ async function refreshCapture(){
   if(signature!==lastSnapshot){renderCapture(data);lastSnapshot=signature;}
 }
 $('version').textContent='v'+chrome.runtime.getManifest().version;
+$('openSettings').onclick=async()=>{try{await chrome.runtime.openOptionsPage();}catch(error){setOutput(error.message);}};
 $('configure').onclick=async()=>{try{await chrome.tabs.create({url:chrome.runtime.getURL('options.html')});}catch(error){setOutput(error.message);}};
 async function loadApplications(){
   const {applications=[],selectedApplicationId}=await chrome.storage.local.get(['applications','selectedApplicationId']);

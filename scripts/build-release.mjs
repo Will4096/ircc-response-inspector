@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {deflateRawSync} from 'node:zlib';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'manifest.json'),'utf8'));
-const files=['LICENSE','manifest.json','autofill.js','background.js','comparison.js','domain.js','form.js','i18n.js','model.js','options.html','options.js','popup.css','popup.html','popup.js','mail-core.js','mail-assist.js','mail-content.js','mail-options.js','mail-popup.js','MAIL-SETUP.md','MAIL-SETUP.en.md','privacy-data.js','privacy.html','privacy.css','profiles.js','scanner.js',
+const files=['LICENSE','manifest.json','autofill.js','background.js','comparison.js','domain.js','form.js','i18n.js','model.js','options.html','options.js','options.css','settings.html','settings.js','popup.css','popup.html','popup.js','mail-core.js','mail-assist.js','mail-content.js','mail-options.js','mail-popup.js','MAIL-SETUP.md','MAIL-SETUP.en.md','privacy-data.js','privacy.html','privacy.css','profiles.js','scanner.js',
   '_locales/zh_CN/messages.json','_locales/en/messages.json',...['16','24','32','48','128'].map(size=>'icons/icon-'+size+'.png')];
 function crc32(bytes){let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 const chunks=[],directory=[];let offset=0;
