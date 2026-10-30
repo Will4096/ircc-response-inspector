@@ -4,6 +4,17 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '邮箱连接':'Email connection',
+    '更换邮箱':'Change mailbox',
+    '更换授权码':'Replace app password',
+    '取消修改':'Cancel changes',
+    'Windows 本机程序':'Windows helper',
+    '首次连接需安装一次。程序可用后，再验证邮箱授权码。':'Install once before connecting. When the helper is available, verify the app password.',
+    '授权码已加密保存在本机，不读取或显示原文。':'Saved encrypted on this computer. The original password is never loaded into this page.',
+    '请输入 163 客户端授权码，不是网页登录密码。':'Enter your 163 app password, not your webmail login password.',
+    '上次验证：':'Last verified: ',
+    '邮箱辅助已关闭，连接信息仍保留。':'Email assistance is off. Connection details are retained.',
+    '验证并保存更改':'Verify and save changes',
     '查看命令':'View command',
     '复制安装命令':'Copy installation command',
     '点击复制安装命令。当前扩展 ID 已自动填好，无需修改。':'Copy the installation command. Your extension ID is already filled in.',

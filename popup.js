@@ -143,8 +143,8 @@ async function refreshCapture(){
   if(signature!==lastSnapshot){renderCapture(data);lastSnapshot=signature;}
 }
 $('version').textContent='v'+chrome.runtime.getManifest().version;
-$('openSettings').onclick=async()=>{try{await chrome.runtime.openOptionsPage();}catch(error){setOutput(error.message);}};
-$('configure').onclick=async()=>{try{await chrome.tabs.create({url:chrome.runtime.getURL('options.html')});}catch(error){setOutput(error.message);}};
+$('openSettings').onclick=()=>navigateApp('settings.html');
+$('configure').onclick=()=>navigateApp('options.html');
 async function loadApplications(){
   const {applications=[],selectedApplicationId}=await chrome.storage.local.get(['applications','selectedApplicationId']);
   const select=$('application');select.replaceChildren();
@@ -209,7 +209,7 @@ $('capture').onclick=async()=>{
 };
 $('export').onclick=async()=>{
   try{
-    await chrome.tabs.create({url:chrome.runtime.getURL('settings.html#backup')});
+    navigateApp('settings.html#backup');
   }catch(error){setOutput(error.message);}
 };
 (async()=>{

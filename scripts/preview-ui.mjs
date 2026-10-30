@@ -2,7 +2,7 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 const root=new URL('../',import.meta.url);
-const allowed=new Set(['layout.js','popup.html','options.html','settings.html','app.css','popup.css','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','installer-ui.js','profiles.js','privacy-data.js','backup-core.js','backup-ui.js','mail-help.html','mail-help.en.html','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/responsive-preview.html']);
+const allowed=new Set(['layout.js','navigation.js','workspace.html','workspace.js','popup.html','options.html','settings.html','app.css','popup.css','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','installer-ui.js','profiles.js','privacy-data.js','privacy.html','privacy.css','backup-core.js','backup-ui.js','mail-help.html','mail-help.en.html','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/responsive-preview.html']);
 http.createServer(async(request,response)=>{
   const file=new URL(request.url,'http://127.0.0.1').pathname.slice(1) || 'settings.html';
   if(!allowed.has(file)){response.writeHead(404);response.end('Not found');return;}

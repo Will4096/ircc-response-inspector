@@ -7,7 +7,7 @@ const names=['privacy-data.js','i18n.js','comparison.js','domain.js','model.js',
 for(const file of names)new vm.Script(await read(file),{filename:file});
 const manifest=JSON.parse(await read('manifest.json'));
 assert.equal(manifest.action.default_popup,undefined,'Toolbar must directly open a persistent side panel');
-assert.equal(manifest.side_panel.default_path,'popup.html?surface=panel');
+assert.equal(manifest.side_panel.default_path,'workspace.html?surface=panel');
 for(const file of [...manifest.content_scripts[0].js,'popup.html','popup.css','options.html'])await fs.access(new URL(file,root));
 const domain={URL,Date};vm.createContext(domain);vm.runInContext(await read('domain.js'),domain);vm.runInContext(await read('model.js'),domain);
 const people=['Person A','Person B','Person C','Person D'];

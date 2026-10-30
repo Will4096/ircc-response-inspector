@@ -44,4 +44,4 @@ assert.ok((await read('options.html')).includes('Surname / Last name'));
 assert.ok((await read('options.html')).includes('Given name / First name'));
 console.log('PASS: Chinese default, English/Chinese switching, header/settings and cross-page synchronization, preference persistence, intact typed/user data, bilingual field names, translated errors and static/UI translation coverage.');
 
-assert.ok(!(await read('options.html')).includes('mailEnabled'));assert.ok(!(await read('options.html')).includes('clearData'));assert.ok((await read('settings.html')).includes('mailEnabled'));assert.equal(JSON.parse(await read('manifest.json')).options_page,'settings.html');
+assert.ok(!(await read('options.html')).includes('mailEnabled'));assert.ok(!(await read('options.html')).includes('clearData'));assert.ok((await read('settings.html')).includes('mailEnabled'));assert.equal(JSON.parse(await read('manifest.json')).options_page,'workspace.html?view=settings');

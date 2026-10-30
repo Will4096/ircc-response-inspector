@@ -28,6 +28,7 @@ async function mailForget(){
 }
 function mailExtensionSender(sender){return !!sender.url?.startsWith(chrome.runtime.getURL(''));}
 function mailTrackerSender(sender){try{return new URL(sender.url).origin==='https://ircc-services.canada.ca';}catch{return false;}}
+function mailPage(url){try{const parsed=new URL(url);return parsed.origin==='https://ircc-services.canada.ca'?parsed.pathname:'';}catch{return '';}}
 async function mailAuthorize(config){
   if(!await chrome.permissions.contains({permissions:['identity'],origins:[MAIL_GMAIL_ORIGIN]}))throw new Error('mail.permission');
   const redirect=chrome.identity.getRedirectURL('gmail'),state=crypto.randomUUID();
@@ -49,8 +50,11 @@ async function mailGmailFetch(path,token){
 }
 function mailDecode(data){try{return new TextDecoder().decode(Uint8Array.from(atob(data.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)));}catch{return '';}}
 function mailPlain(part){
+  if(part.filename)return '';
   if(part.mimeType==='text/plain')return mailDecode(part.body?.data || '');
-  const children=(part.parts || []).map(mailPlain).filter(Boolean);return children.join('\n').slice(0,64000);
+  if(part.mimeType==='text/html')return MailCore.htmlText(mailDecode(part.body?.data || ''));
+  const parts=part.parts || [],plain=parts.filter(p=>p.mimeType==='text/plain').map(mailPlain).filter(Boolean);
+  return (plain.length?plain:parts.map(mailPlain).filter(Boolean)).join('\n').slice(0,64000);
 }
 async function mailMessages(config,request){
   if(config.provider==='163')return (await mailNative({action:'poll',email:config.email,since:request.startedAt})).messages || [];
@@ -70,7 +74,7 @@ async function mailContext(tabId,request){
   const config=await mailConfig(),selected=await chrome.storage.local.get(['selectedApplicationId','applications']);
   let tab;try{tab=await chrome.tabs.get(tabId);}catch{return null;}
   if(!config.enabled || !request || request.deadline<Date.now() || selected.selectedApplicationId!==request.profileId || config.email!==request.email || config.provider!==request.provider || !selected.applications?.some(p=>p.id===request.profileId))return null;
-  if(tab.url!=='https://ircc-services.canada.ca/2/ast-otp-verification')return null;
+  if(mailPage(tab.url)!=='/2/ast-otp-verification')return null;
   return config;
 }
 let mailTrackQueue=Promise.resolve();
@@ -93,11 +97,12 @@ async function mailPoll(tabId){
   const config=await mailContext(tabId,request);
   if(!config){await mailCancel(tabId);return {status:(await mailConfig()).enabled?'unbound':'off'};}
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
   try{
     const messages=await mailMessages(config,request);
+    secrets.checkedAt=Date.now();
     if(mailRequests.get(tabId)!==request || !await mailContext(tabId,request))return {status:'off'};
     const candidates=MailCore.candidates(messages,request,secrets.excluded);
     const filtered=[];for(const c of candidates)if(!(request.consumed || []).includes(await mailDigest(request,c.code)))filtered.push(c);
@@ -186,5 +191,5 @@ async function mailHandle(message,sender){
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local' && (changes.selectedApplicationId || changes.mailAssist || changes.applications))void mailCancelAll();});
 chrome.tabs.onRemoved.addListener(id=>void mailCancel(id));
 chrome.tabs.onUpdated.addListener((id,change)=>{
-  if(change.url && !['https://ircc-services.canada.ca/2/ast-search','https://ircc-services.canada.ca/2/ast-otp-verification'].includes(change.url))void mailCancel(id);
+  if(change.url && !['/2/ast-search','/2/ast-otp-verification'].includes(mailPage(change.url)))void mailCancel(id);
 });

@@ -8,10 +8,13 @@
 - Default Chinese, complete English support, retain official field terms where useful. Language changes must preserve unsaved input. Show specific action feedback, not a generic Done message.
 - Handle empty, loading, success, failure, cancellation, disabled, expired and unsaved-edit states. Destructive actions are visually separated and describe their effect.
 - Review both language layouts and representative user flows with synthetic data before delivery; tests passing alone do not establish usability. Do not read browser storage, emails or other personal data to create previews.
-- Work on the preview branch until explicitly ready and authorized to merge. Development source lives in public-upload/. The parent directory is the user's installed unpacked extension: deploy only an explicit runtime allowlist there, preserving its path/ID and storage.
+- Work on the preview branch until explicitly ready and authorized to merge. Development source lives in Family/ircc-response-inspector-development/public-upload/. The installed unpacked extension remains Family/ircc-response-inspector/. Use scripts/deploy-local.mjs to deploy the explicit runtime allowlist, preserving its path/ID and storage; never place source, Git, test browser profiles, media or build output inside the installed extension directory.
 - No credentials, email bodies, OTPs or private application records in source, fixtures, logs or exports. No bypass of browser/tool access denials.
 - Keep README languages in separate linked files. Record remaining integration limitations honestly, and persist agreed product decisions in PRODUCT.md.
 
 - Use the loopback Tracker simulator and offline regression tests first. Access real IRCC only for targeted compatibility checks that the simulator cannot establish. Keep simulation assets and localhost permissions out of the extension runtime.
 
 - User-facing data exports are password-encrypted backups only. Use authenticated encryption, preview imports before explicit replacement, retain manual fallback, and exclude mailbox credentials/tokens/codes. Never export plaintext profile/query backups.
+
+- Use a single persistent workspace for query, profiles and settings. Internal navigation must not create browser tabs or discard unsaved inputs. Only explicit external actions such as opening Tracker may open a website.
+- Show a persistent masked saved-state marker for stored app passwords; never read the actual secret back into the UI. Separate saved connection state from request binding, polling and candidate confirmation.

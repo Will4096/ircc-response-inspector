@@ -33,7 +33,7 @@
     await $('mailHelperStatus').onclick();await settle();
     assert($('mailHelperState').textContent==='本机程序未连接'&&$('mailConnect').hidden,'helper failure has consistent state and no invalid connect button');
     assert($('mailPassword').value==='synthetic-app-password','helper failure preserves typed password');
-    assert($('mailExtensionId').textContent==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'&&$('mailInstallHelp').open&&$('mailInstallHelp').closest('.notice').querySelector('#mailHelperStatus'),'installation help expands beside helper check');
+    assert($('mailExtensionId').textContent==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'&&$('mailInstallHelp').open&&$('mailInstallHelp').closest('.mail-prerequisite').querySelector('#mailHelperStatus'),'installation help expands beside helper check');
     assert($('installerCommand').textContent.includes("-ExtensionId 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")&&$('installerCommand').textContent.includes('Get-FileHash')&&!$('installerCopy').disabled,'copy command includes extension ID and pinned integrity check');
     assert(!$('mailSetupGuide').hasAttribute('href')&&!$('aboutHelp').hasAttribute('target'),'help navigation does not create new tabs');
     w=await load('/settings.html');await settle();
@@ -57,7 +57,32 @@
       frame.style.width='350px';w=await load('/settings.html?mail=error&lang='+lang);await settle();
       assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' settings and backup fit narrow viewport');
     }
-    frame.style.width='850px';w=await load('/settings.html?mail=error');await settle();w.document.getElementById('mailInstallHelp').open=true;w.document.getElementById('mailInstallHelp').scrollIntoView();
+    w=await load('/settings.html?mail=connected');await settle();
+    assert($('mailPassword').value===''&&$('mailPassword').placeholder==='••••••••'&&$('mailPassword').readOnly&&!$('mailCredentialState').hidden,'saved app password has a persistent mask without loading the secret');
+    $('mailEditPassword').click();$('mailPassword').value='synthetic-replacement-secret';$('mailPassword').dispatchEvent(new w.Event('input'));
+    await w.I18n.setLanguage('en');assert($('mailPassword').value==='synthetic-replacement-secret'&&!$('mailPassword').readOnly,'language switch retains a new app password draft');
+    $('mailCancelEdit').click();assert($('mailPassword').value===''&&$('mailPassword').readOnly,'cancel replacement restores saved mask');
+    $('mailEditPassword').click();$('mailPassword').value='synthetic-replacement-secret';await $('mailConnect').onclick();
+    assert($('mailPassword').value===''&&$('mailPassword').placeholder==='••••••••'&&!JSON.stringify(await w.chrome.storage.local.get(null)).includes('synthetic-replacement-secret'),'successful update clears the draft and retains only a saved marker');
+    frame.style.width='390px';w=await load('/workspace.html?surface=panel&mail=connected&stage=verification');await settle();await settle();
+    let opened=0;w.chrome.tabs.create=async()=>{opened++;return {id:99};};
+    w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();
+    const settingsFrame=w.document.querySelector('iframe[data-view="settings.html"]'),settingsWindow=settingsFrame.contentWindow;
+    settingsWindow.document.getElementById('mailEditPassword').click();settingsWindow.document.getElementById('mailPassword').value='unsaved-workspace-secret';
+    w.document.querySelector('[data-view="options.html"]').click();await settle();await settle();w.document.querySelector('[data-view="settings.html"]').click();await settle();
+    assert(settingsWindow.document.getElementById('mailPassword').value==='unsaved-workspace-secret'&&opened===0,'workspace switches views without new tabs or losing unsaved inputs');
+    w.document.querySelector('[data-view="popup.html"]').click();await settle();await new Promise(r=>setTimeout(r,1700));
+    const queryWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;
+    assert(queryWindow.document.querySelector('#mailAssistStatus .mail-loading'),'verification shows an active waiting indicator');
+    queryWindow.document.getElementById('openSettings').click();await settle();
+    assert(!settingsFrame.hidden&&opened===0,'query settings action stays inside the same workspace');
+    assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,'single workspace fits the narrow side panel');
+    settingsWindow.document.getElementById('mailCancelEdit').click();
+    w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=unbound');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
+    const unbound=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('mailAssistStatus');
+    assert(unbound.textContent.includes('本次请求尚未关联')&&!unbound.querySelector('.mail-loading')&&unbound.querySelector('button'),'unbound request gives a concrete action instead of an endless spinner');
+    w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();
+    w.document.querySelector('iframe[data-view="settings.html"]').contentDocument.getElementById('mailPasswordLabel').scrollIntoView();
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

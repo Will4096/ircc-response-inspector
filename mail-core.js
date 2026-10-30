@@ -1,6 +1,9 @@
 // Pure matching rules. Never persist a message body or a verification code.
 var MailCore=(()=>{
   const address=value=>String(value || '').trim().toLowerCase();
+  function htmlText(value){
+    return String(value||'').slice(0,131072).replace(/<!--[\s\S]*?-->/g,' ').replace(/<(script|style|head|noscript|svg)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,' ').replace(/<[^>]*>/g,' ').replace(/&(?:nbsp|amp|lt|gt|quot|apos);/gi,m=>({'&nbsp;':' ','&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&apos;':"'"})[m.toLowerCase()]).replace(/&#(x[0-9a-f]+|[0-9]+);/gi,(_,n)=>{const code=n[0].toLowerCase()==='x'?parseInt(n.slice(1),16):Number(n);return code>0&&code<=0x10ffff?String.fromCodePoint(code):' ';}).replace(/\s+/g,' ').trim().slice(0,64000);
+  }
   function senderAllowed(from){
     const raw=String(from || '').trim();
     const value=raw.includes('<')?raw.match(/^[^<>]*<([^<>]+)>$/)?.[1]:raw;
@@ -35,5 +38,5 @@ var MailCore=(()=>{
     if(provider==='gmail' && !/^[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(clientId))throw new Error('mail.client');
     return {enabled:true,provider,email,clientId:provider==='gmail'?clientId:''};
   }
-  return {candidates,normalizeConfig,address};
+  return {candidates,normalizeConfig,address,htmlText};
 })();

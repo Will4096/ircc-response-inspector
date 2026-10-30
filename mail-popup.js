@@ -1,10 +1,11 @@
 // Verification assistance is contextual; configuration stays on the settings page.
 (()=>{
   const box=document.createElement('div');box.id='mailAssistStatus';box.hidden=true;
+  box.setAttribute('role','status');box.setAttribute('aria-live','polite');
   document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
   const labels={
-    unbound:['未关联本次请求','Request not linked','请在 Tracker 重新提交申请资料，或直接手动输入验证码。','Submit the application form in Tracker again, or enter the code manually.'],
+    unbound:['邮箱辅助已开启 · 本次请求尚未关联','Email assistance on · query not linked','邮箱连接已配置，但尚未捕获本次查询提交，或本次等待已结束。请重新提交 Tracker 查询表单；也可直接粘贴本次验证码。','Your mailbox is configured, but this query submission was not observed or waiting has ended. Submit the Tracker form again, or paste the code manually.'],
     waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
     'mail.auth':['Gmail 需要重新授权','Gmail authorization needed','前往设置重新连接，或继续手动输入。','Reconnect in settings, or enter the code manually.'],
     'mail.helper':['本机程序未连接','Local helper unavailable','前往设置检查本机程序，或继续手动输入。','Check the helper in settings, or enter the code manually.'],
@@ -17,14 +18,17 @@
     if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';return;}
     busy=true;
     try{
+      if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
       const data=await send('mailPoll');
       if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}
       const key=JSON.stringify([data,I18n.language]);if(key===signature)return;signature=key;
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
       if(data.status!=='candidates'){
         const text=labels[data.status] || labels['mail.network'];
-        node('strong',text[I18n.language==='en'?1:0]);node('p',text[I18n.language==='en'?3:2]);
-        if(data.status.startsWith('mail.')){const link=node('a',say('前往设置','Open settings'));link.href='settings.html';link.target='_blank';}
+        const heading=node('strong',text[I18n.language==='en'?1:0]);if(data.status==='waiting')heading.className='mail-loading';node('p',text[I18n.language==='en'?3:2]);
+        if(data.status==='waiting'&&data.checkedAt)node('small',say('上次检查：','Last checked: ')+I18n.date(data.checkedAt));
+        if(data.status==='unbound'){const restart=node('button',say('返回 Tracker 重新提交','Return to Tracker form'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
+        if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
         return;
       }
       node('strong',say('核对邮箱验证码','Review email verification code'));
@@ -52,5 +56,5 @@
     }catch{signature='';box.hidden=false;box.replaceChildren();node('p',say('邮箱辅助暂不可用，仍可手动输入验证码。','Email assistance is unavailable. You can still enter the code manually.'));}
     finally{busy=false;}
   }
-  setInterval(tick,1500);I18n.onChange(()=>{signature='';void tick();});
+  setInterval(tick,1500);void tick();I18n.onChange(()=>{signature='';void tick();});
 })();
