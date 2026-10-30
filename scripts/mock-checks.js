@@ -13,10 +13,15 @@
     w=await load('/2/ast-otp-verification?expired=1');assert(w.document.body.textContent.includes('Session expired')&&!w.document.querySelector('form'),'expired session has no verification form');
     for(const lang of ['zh','en'])for(const stage of ['verification','results']){
       // Start narrow to reproduce Chrome's intrinsic popup sizing, rather than a full browser tab.
-      frame.style.width='260px';w=await load('/popup.html?lang='+lang+'&stage='+stage);await settle();
+      frame.style.width='260px';w=await load('/popup.html?surface=popup&lang='+lang+'&stage='+stage);await settle();
       assert(w.document.documentElement.scrollWidth===780,lang+' '+stage+' popup retains intrinsic width');
       frame.style.width='780px';await settle();assert(w.document.documentElement.scrollWidth===780,lang+' '+stage+' popup has no horizontal overflow');
       assert(w.document.querySelector('.app-nav').getBoundingClientRect().height<50,lang+' '+stage+' navigation fits one row');
+      frame.style.width='1400px';w=await load('/popup.html?lang='+lang+'&stage='+stage);await settle();
+      let box=w.document.querySelector('.app-shell').getBoundingClientRect();
+      assert(Math.abs(box.left-(w.document.documentElement.clientWidth-box.width)/2)<2&&box.width===1080,lang+' '+stage+' tab uses centered shared shell');
+      frame.style.width='390px';await settle();
+      assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' '+stage+' narrow tab has no page overflow');
     }
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
