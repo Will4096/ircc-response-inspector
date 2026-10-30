@@ -20,6 +20,24 @@ ROOT = Path(os.environ.get('LOCALAPPDATA', '.')) / 'IRCCMailHelper'
 SECRET = ROOT / 'mailbox.dpapi'
 
 
+def diagnostic(stage, count=None):
+    # Fixed vocabulary only: never log protocol payloads, exception text or secrets.
+    if stage not in {'start', 'login_ok', 'search_ok', 'messages_ready', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
+        return
+    try:
+        ROOT.mkdir(parents=True, exist_ok=True)
+        target = ROOT / 'diagnostic.log'
+        if target.exists() and target.stat().st_size > 65536:
+            target.replace(ROOT / 'diagnostic.previous.log')
+        event = {'time': dt.datetime.now(dt.timezone.utc).isoformat(), 'stage': stage}
+        if type(count) is int and 0 <= count <= 100000:
+            event['count'] = count
+        with target.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(event) + '\n')
+    except OSError:
+        pass  # Diagnostic failures must not break verification.
+
+
 def protect(data, decrypt=False):
     if sys.platform != 'win32':
         raise ValueError('mail.windows')
@@ -162,6 +180,7 @@ def handle(request):
     if credentials['email'] != address:
         raise ValueError('mail.account')
     client = connect(address, credentials['password'])
+    diagnostic('login_ok')
     if action == 'test':
         logout(client)
         return {'ok': True}
@@ -172,6 +191,7 @@ def handle(request):
         status, data = client.uid('search', None, 'SINCE', date, 'OR', 'FROM', 'cic.gc.ca', 'FROM', 'canada.ca')
         if status != 'OK':
             raise ValueError('mail.network')
+        diagnostic('search_ok', len((data[0] or b'').split()))
         for uid in (data[0] or b'').split()[-10:]:
             status, result = client.uid('fetch', uid, '(INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO DELIVERED-TO SUBJECT)])')
             if status != 'OK':
@@ -192,6 +212,7 @@ def handle(request):
             if status == 'OK':
                 body = next((v[1] for v in result if isinstance(v, tuple)), b'')
                 messages.append(extract_message(uid.decode('ascii'), body, received))
+        diagnostic('messages_ready', len(messages))
         return {'messages': messages}
     finally:
         logout(client)
@@ -221,6 +242,7 @@ def main():
     if not 0 < length <= MAX_MESSAGE:
         return
     try:
+        diagnostic('start')
         raw = read_exact(sys.stdin.buffer, length)
         result = handle(json.loads(raw))
     except imaplib.IMAP4.error:
@@ -230,6 +252,7 @@ def main():
     except Exception:
         # Never expose exception strings (which can contain credentials or body text).
         result = {'error': 'mail.network'}
+    diagnostic(result.get('error', 'complete'))
     output = json.dumps(result, ensure_ascii=False).encode('utf-8')
     if len(output) > 1000000:
         output = b'{"error":"mail.network"}'

@@ -17,6 +17,18 @@ spec.loader.exec_module(host)
 
 
 class HostTests(unittest.TestCase):
+    def test_diagnostic_contains_only_fixed_stages_and_counts(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+            with patch.object(host, 'ROOT', Path(directory)):
+                host.diagnostic('secret@example.invalid')
+                host.diagnostic('search_ok', 2)
+                host.diagnostic('mail.network', 'synthetic-secret')
+            events = [json.loads(line) for line in (Path(directory) / 'diagnostic.log').read_text().splitlines()]
+            self.assertEqual(len(events), 2)
+            self.assertEqual(events[0]['count'], 2)
+            self.assertNotIn('count', events[1])
+            self.assertNotIn('secret', json.dumps(events))
+
     def test_partial_frame(self):
         self.assertEqual(host.read_exact(io.BytesIO(b'abcd'), 4), b'abcd')
         self.assertIsNone(host.read_exact(io.BytesIO(b'ab'), 4))

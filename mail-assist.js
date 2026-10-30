@@ -7,6 +7,10 @@ let mailNativeStatus=null;
 const MAIL_WINDOW=180000; // Observation window, NOT a claim about IRCC code validity.
 let mailWrites=Promise.resolve();
 function mailWrite(work){const next=mailWrites.then(work);mailWrites=next.catch(()=>{});return next;}
+function mailDiagnostic(stage,count){
+  if(!['request_linked','fetch_start','fetch_complete','matched','mail.auth','mail.account','mail.credentials','mail.helper','mail.permission','mail.windows','mail.network'].includes(stage))return;
+  return mailWrite(async()=>{const key='mail:diagnostics';const previous=(await chrome.storage.session.get(key))[key]||[];const event={at:Date.now(),stage};if(Number.isInteger(count)&&count>=0)event.count=count;await chrome.storage.session.set({[key]:[...previous,event].slice(-80)});}).catch(()=>{});
+}
 async function mailNative(payload){
   if((await chrome.runtime.getPlatformInfo()).os!=='win')throw new Error('mail.windows');
   if(!await chrome.permissions.contains({permissions:['nativeMessaging']}))throw new Error('mail.permission');
@@ -106,6 +110,7 @@ async function mailTrackNow(tabId,number,observedAt){
   await mailCancelAll();
   const request={id:crypto.randomUUID(),profileId:profile.id,applicationNumber:normalizeApplicationNumber(number),email:config.email,provider:config.provider,startedAt:observedAt,deadline:observedAt+MAIL_WINDOW};
   mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});
+  await mailDiagnostic('request_linked');
   await mailWrite(async()=>{if(mailRequests.get(tabId)===request)await chrome.storage.session.set({['mail:request:'+tabId]:request});});return {ok:true};
 }
 async function mailPoll(tabId){
@@ -131,18 +136,22 @@ async function mailPoll(tabId){
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
   try{
+    await mailDiagnostic('fetch_start');
     const messages=await mailMessages(config,request);
+    await mailDiagnostic('fetch_complete',messages.length);
     secrets.checkedAt=Date.now();
     if(mailRequests.get(tabId)!==request || !await mailContext(tabId,request))return {status:'off'};
     const inspection=MailCore.inspect(messages,request,secrets.excluded);secrets.diagnostic=inspection.diagnostic;
     const candidates=inspection.candidates;
     const filtered=[];for(const c of candidates)if(!(request.consumed || []).includes(await mailDigest(request,c.code)))filtered.push(c);
     secrets.candidates=filtered;delete secrets.error;
+    await mailDiagnostic('matched',filtered.length);
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(saved?.email===config.email && saved.lastError)await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});
   }catch(error){
     if(mailRequests.get(tabId)!==request)return {status:'off'};
     secrets.error=['mail.auth','mail.account','mail.credentials','mail.helper','mail.permission','mail.windows','mail.network'].includes(error.message)?error.message:'mail.network';
+    await mailDiagnostic(secrets.error);
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(mailRequests.get(tabId)===request && saved?.email===config.email && saved.lastError!==secrets.error)await chrome.storage.local.set({mailConnection:{...saved,lastError:secrets.error}});
   }
