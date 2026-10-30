@@ -4,6 +4,7 @@ const mailTrackingTabs=new Map();
 const MAIL_NATIVE='com.will4096.ircc_mail';
 const MAIL_GMAIL_ORIGIN='https://gmail.googleapis.com/*';
 let mailNativeStatus=null;
+let mailNativeObserved=null;
 const MAIL_WINDOW=600000; // Observation window, NOT a claim about IRCC code validity.
 const mailEnded=new Map();
 let mailWrites=Promise.resolve();
@@ -16,8 +17,12 @@ async function mailNative(payload){
   if((await chrome.runtime.getPlatformInfo()).os!=='win')throw new Error('mail.windows');
   if(!await chrome.permissions.contains({permissions:['nativeMessaging']}))throw new Error('mail.permission');
   try{const result=await chrome.runtime.sendNativeMessage(MAIL_NATIVE,payload);if(result?.error)throw new Error(result.error);
+    const version=result?.helperVersion??result?.version;
+    mailNativeObserved={version:typeof version==='string'&&/^\d+\.\d+(?:\.\d+)?$/.test(version)?version:null,protocol:Number.isInteger(result?.protocol)?result.protocol:null};
     if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<2))throw new Error('mail.version');
-    mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};return result;}
+    mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};
+    if(payload.action!=='clear'){const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;if(saved?.lastError==='mail.version')await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});}
+    return result;}
   catch(error){if(error.message==='mail.version')mailNativeStatus={helperReady:false,error:'mail.version'};else if(error.message==='mail.helper'||!/^mail\./.test(error.message))mailNativeStatus={helperReady:false};if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
 }
 async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
@@ -134,7 +139,7 @@ async function mailPoll(tabId){
   if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
   if(mailPage(tab.url)!=='/2/ast-otp-verification'){await mailCancel(tabId,request);return {status:'unbound'};}
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.candidates.length)return display(); // Waiting for confirmation is not a new fetch demand.
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
@@ -188,6 +193,7 @@ async function mailHandle(message,sender){
         // Rendering settings must not launch a native process. Show last verified configuration.
         connection.helperReady=mailNativeStatus?.helperReady??(connection.error==='mail.helper'?false:connection.verifiedAt?true:undefined);
         if(mailNativeStatus?.error)connection.error=mailNativeStatus.error;
+        connection.helperVersion=mailNativeObserved?.version;connection.helperProtocol=mailNativeObserved?.protocol;
         connection.configured=mailNativeStatus?.configured??!!connection.verifiedAt;connection.onDemand=true;
       }
       return {config,connection,extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};

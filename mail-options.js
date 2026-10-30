@@ -24,6 +24,7 @@
     $('mailVerifiedAt').hidden=!hasSaved();if(hasSaved())$('mailVerifiedAt').textContent=t('上次验证：')+I18n.date(connection.verifiedAt);
     if(!value.enabled&&hasSaved())$('mailStateHelp').textContent=t('邮箱辅助已关闭，连接信息仍保留。');
     $('gmailSetupHint').hidden=clientValid();$('mailHelperState').textContent=t(helperKey);
+    if(connection.error==='mail.version')$('mailHelperState').textContent+=' · '+(I18n.language==='en'?'Received version / protocol: ':'实际版本 / 协议：')+(connection.helperVersion||'—')+' / '+(connection.helperProtocol??'—');
     $('mailConnect').hidden=!value.enabled||(state.state==='connected'&&!editingPassword&&!editingConnection&&!$('mailPassword').value);
     $('mailConnect').textContent=t(busy?'正在连接…':gmail?clientValid()?(state.state==='reauth'?'重新授权 Gmail':'连接 Gmail 并启用'):'配置 Gmail 连接':state.state==='error'?'重新验证连接':connection.verifiedAt && stored.email===value.email && stored.provider==='163' && !$('mailPassword').value?'启用邮箱辅助':'验证连接并启用');
     $('mailDisconnectArea').hidden=!connection.verifiedAt && !stored.enabled;
