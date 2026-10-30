@@ -173,7 +173,7 @@ def handle(request):
     if action == 'poll':
         since = float(request.get('since', 0))
         now = dt.datetime.now(dt.timezone.utc).timestamp() * 1000
-        if not now - 300000 <= since <= now + 60000:
+        if not now - 601000 <= since <= now + 60000:
             raise ValueError('mail.stale')
     if not SECRET.exists():
         raise ValueError('mail.credentials')

@@ -5,6 +5,7 @@
   document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
   const labels={
+    expired:['自动收码等待已结束','Automatic retrieval wait ended','已停止检查邮箱，这不代表验证码已过期。可粘贴已收到的验证码；也可返回 Tracker 重新查询。','Mailbox checks have stopped; this does not mean the code has expired. Paste the code you received, or restart the Tracker query.'],
     requesting:['已记录提交，等待 Tracker 验证页面','Submission recorded · waiting for Tracker','Tracker 正在处理本次提交，进入验证码页后再检查邮箱。','Tracker is processing this submission. Email checking starts on the verification page.'],
     unbound:['本次查询未在自动收码中','Automatic code retrieval is not active for this query','如需自动获取，请返回 Tracker 重新提交查询；已收到验证码可直接粘贴，无需重新查询。','To start automatic retrieval, return to Tracker and submit the query again. If you already have the code, paste it here without restarting.'],
     waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
@@ -16,6 +17,7 @@
   };
   function node(tag,text,parent=box){const e=document.createElement(tag);if(text)e.textContent=text;parent.append(e);return e;}
   async function tick(){
+    if(typeof workspaceVisible!=='undefined'&&!workspaceVisible)return;
     if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
     if(currentContext.stage!=='verification' || currentContext.observerReady===false || displayedCapture?.active){box.hidden=true;signature='';return;}
     busy=true;
@@ -35,7 +37,7 @@
           node('p',data.diagnostic.checked?say('已检查近期邮件，但尚未匹配本次验证码。','Recent messages checked; no matching code yet.'):say('邮箱服务未返回符合本次时间及发件人范围的邮件。','The mailbox service returned no messages in this request’s time and sender range.'),detail);
           for(const [reason,count] of Object.entries(data.diagnostic.rejected||{}))if(reasons[reason])node('p',say(...reasons[reason])+' · '+count,detail);
         }
-        if(data.status==='unbound'){const restart=node('button',say('重新开始自动收码','Restart automatic code retrieval'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
+        if(['unbound','expired'].includes(data.status)){const restart=node('button',say('重新开始自动收码','Restart automatic code retrieval'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
         if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
         return;
       }

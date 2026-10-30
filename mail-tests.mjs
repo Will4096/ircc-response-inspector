@@ -89,7 +89,7 @@ await context.mailHandle({action:'mailIgnore',tabId:7,requestId:ignored.requestI
 time+=11000;assert.equal((await context.mailPoll(7)).status,'waiting');
 url='https://gc.auth.canada.ca/login';const beforeLeave=polls;assert.equal((await context.mailPoll(7)).status,'unbound','Expired Tracker session stops mailbox access');assert.equal(polls,beforeLeave);
 await assert.rejects(()=>context.mailHandle({action:'mailSave',config:{enabled:false}},{tab:{id:7},url:'https://ircc-services.canada.ca/2/ast-search'}));
-url='https://ircc-services.canada.ca/2/ast-otp-verification';await context.mailTrack(7,'TESTA');time+=180001;assert.equal((await context.mailPoll(7)).status,'unbound');
+url='https://ircc-services.canada.ca/2/ast-otp-verification';await context.mailTrack(7,'TESTA');time+=600001;assert.equal((await context.mailPoll(7)).status,'expired');assert.equal((await context.mailPoll(7)).status,'expired');
 await context.mailTrack(7,'TESTA');persistent.mailAssist.enabled=false;const count=polls;assert.equal((await context.mailPoll(7)).status,'off');assert.equal(polls,count);
 // No accidental broad host grants, raw codes in export, or installer in runtime ZIP.
 const manifest=JSON.parse(await read('manifest.json'));

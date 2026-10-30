@@ -4,7 +4,8 @@ const mailTrackingTabs=new Map();
 const MAIL_NATIVE='com.will4096.ircc_mail';
 const MAIL_GMAIL_ORIGIN='https://gmail.googleapis.com/*';
 let mailNativeStatus=null;
-const MAIL_WINDOW=180000; // Observation window, NOT a claim about IRCC code validity.
+const MAIL_WINDOW=600000; // Observation window, NOT a claim about IRCC code validity.
+const mailEnded=new Map();
 let mailWrites=Promise.resolve();
 function mailWrite(work){const next=mailWrites.then(work);mailWrites=next.catch(()=>{});return next;}
 function mailDiagnostic(stage,count){
@@ -111,6 +112,7 @@ async function mailTrackNow(tabId,number,observedAt){
   await mailCancelAll();
   const request={id:crypto.randomUUID(),profileId:profile.id,applicationNumber:normalizeApplicationNumber(number),email:config.email,provider:config.provider,startedAt:observedAt,deadline:observedAt+MAIL_WINDOW};
   mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});
+  mailEnded.delete(tabId);
   await mailDiagnostic('request_linked');
   await mailWrite(async()=>{if(mailRequests.get(tabId)===request)await chrome.storage.session.set({['mail:request:'+tabId]:request});});return {ok:true};
 }
@@ -126,7 +128,7 @@ async function mailPoll(tabId){
   }
   const config=await mailBinding(request);
   if(mailTrackingTabs.has(tabId)||mailRequests.get(tabId)!==request)return {status:'requesting'};
-  if(!config){await mailCancel(tabId,request);return {status:(await mailConfig()).enabled?'unbound':'off'};}
+  if(!config){const expired=request&&request.deadline<Date.now();await mailCancel(tabId,request);if(expired)mailEnded.set(tabId,request.profileId);const settings=await mailConfig(),selected=await chrome.storage.local.get('selectedApplicationId');return {status:!settings.enabled?'off':mailEnded.get(tabId)===selected.selectedApplicationId?'expired':'unbound'};}
   let tab;try{tab=await chrome.tabs.get(tabId);}catch{await mailCancel(tabId,request);return {status:'unbound'};}
   // A submit click precedes navigation. A stale UI poll must not erase that new binding.
   if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
