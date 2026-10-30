@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
@@ -30,7 +30,6 @@
     "https://ircc-services.canada.ca/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "24": "icons/icon-24.png",
@@ -51,7 +50,7 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
   },
-  "version_name": "3.7.1-mail-preview",
+  "version_name": "3.7.2-mail-preview",
   "optional_permissions": [
     "identity",
     "nativeMessaging"

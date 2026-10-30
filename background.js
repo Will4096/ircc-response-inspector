@@ -11,6 +11,14 @@ importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
 let backupRestoring=false;
+// Use Chrome's persistent host from the very first toolbar click. A transient
+// action popup can disappear before handing control over to a side panel.
+function configureQueryPanel(){
+  return chrome.sidePanel?.setPanelBehavior?.({openPanelOnActionClick:true})?.catch(()=>{});
+}
+configureQueryPanel();
+chrome.runtime.onInstalled?.addListener(configureQueryPanel);
+chrome.runtime.onStartup?.addListener(configureQueryPanel);
 // Remove the mailbox listener and metadata left by 3.1.0–3.1.2 on upgrade.
 async function removeLegacyMailAssist(){
   if(chrome.scripting?.getRegisteredContentScripts){

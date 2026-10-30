@@ -6,6 +6,8 @@ const read=name=>fs.readFile(new URL(name,root),'utf8');
 const names=['privacy-data.js','i18n.js','comparison.js','domain.js','model.js','profiles.js','scanner.js','form.js','background.js','autofill.js','popup.js','options.js'];
 for(const file of names)new vm.Script(await read(file),{filename:file});
 const manifest=JSON.parse(await read('manifest.json'));
+assert.equal(manifest.action.default_popup,undefined,'Toolbar must directly open a persistent side panel');
+assert.equal(manifest.side_panel.default_path,'popup.html?surface=panel');
 for(const file of [...manifest.content_scripts[0].js,'popup.html','popup.css','options.html'])await fs.access(new URL(file,root));
 const domain={URL,Date};vm.createContext(domain);vm.runInContext(await read('domain.js'),domain);vm.runInContext(await read('model.js'),domain);
 const people=['Person A','Person B','Person C','Person D'];
@@ -34,6 +36,11 @@ async function harness(saved){
     await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:'https://ircc-services.canada.ca/api',status:200,mimeType:'application/json'}});
     await network({tabId:7},'Network.loadingFinished',{requestId:key});
   },async hang(){await network({tabId:7},'Network.responseReceived',{requestId:'forever',type:'Fetch',response:{url:'https://ircc-services.canada.ca/irrelevant',status:200,mimeType:'application/json'}});}};
+}
+{
+  const h=await harness();let registered=0;
+  h.context.chrome.sidePanel={setPanelBehavior:async options=>{assert.equal(options.openPanelOnActionClick,true);registered++;}};
+  await h.context.configureQueryPanel();assert.equal(registered,1,'Toolbar uses the native persistent panel behavior');
 }
 // Side-panel handoff runs in the worker and never reuses a tab in a different window.
 {
