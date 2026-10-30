@@ -20,6 +20,7 @@ globalThis.I18n=(()=>{
     '取消后可自行检查资料，并在官网手动点击 Submit。':'Cancel to review the details and click Submit on Tracker yourself.',
     '取消自动提交':'Cancel auto-submit',
     '立即提交':'Submit now',
+    '实际版本 / 协议：':'Received version / protocol: ',
     '本机程序版本不兼容，请使用安装帮助中的命令更新。':'The helper version is incompatible. Update it using the command in installation help.',
     '将在 {seconds} 秒后自动提交':'Automatically submitting in {seconds} seconds',
     '正在提交查询…':'Submitting the query…',
