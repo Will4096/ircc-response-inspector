@@ -10,7 +10,7 @@
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
   const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
-  window.chrome={storage:{local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{request:async()=>true},runtime:{id:'synthetic-preview',getManifest:()=>({version:'3.6.0'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+  window.chrome={storage:{local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{request:async()=>true},runtime:{id:'synthetic-preview',getManifest:()=>({version:'3.6.1'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
       case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'synthetic-preview',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
       case 'mailHelperStatus':return nativeReady?{ok:true,configured}:{error:'mail.helper'};

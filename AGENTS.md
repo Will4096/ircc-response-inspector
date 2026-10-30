@@ -11,3 +11,5 @@
 - Work on the preview branch until explicitly ready and authorized to merge. Development source lives in public-upload/. The parent directory is the user's installed unpacked extension: deploy only an explicit runtime allowlist there, preserving its path/ID and storage.
 - No credentials, email bodies, OTPs or private application records in source, fixtures, logs or exports. No bypass of browser/tool access denials.
 - Keep README languages in separate linked files. Record remaining integration limitations honestly, and persist agreed product decisions in PRODUCT.md.
+
+- Use the loopback Tracker simulator and offline regression tests first. Access real IRCC only for targeted compatibility checks that the simulator cannot establish. Keep simulation assets and localhost permissions out of the extension runtime.
