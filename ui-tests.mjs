@@ -38,5 +38,5 @@ assert.ok((await read('popup.js')).includes("if(targetTabId && ['login','form','
 const c={chrome:{storage:{onChanged:{addListener(){}}}}};vm.createContext(c);vm.runInContext(await read('i18n.js'),c);
 // Force English through the same public initialization API.
 c.chrome.storage.local={get:async()=>({uiLanguage:'en'})};await c.I18n.init();
-for(const file of ['ui-model.js','mail-options.js','options.js','settings.js'])for(const match of (await read(file)).matchAll(/'([^'\n]*[\u3400-\u9fff][^'\n]*)'/g))assert.notEqual(c.I18n.t(match[1]),match[1],file+': '+match[1]);
+for(const file of ['ui-model.js','mail-options.js','backup-ui.js','options.js','settings.js'])for(const match of (await read(file)).matchAll(/'([^'\n]*[\u3400-\u9fff][^'\n]*)'/g))assert.notEqual(c.I18n.t(match[1]),match[1],file+': '+match[1]);
 console.log('PASS: query action model, connection/setup/expired states, shared navigation and styling, progressive settings, isolated destructive actions, asset links, and complete state-copy translation.');

@@ -28,7 +28,7 @@ const recovered=domain.analyzeStoredCapture(legacy);assert.equal(recovered.statu
 async function harness(saved){
   let handler,network;let url='https://ircc-services.canada.ca/2/ast-details';let detached=0;let reloads=0;const moves=[];const timers=[];const stored=saved?{'capture:7':saved}:{};const bodies=new Map();
   const context={URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
-  vm.createContext(context);for(const name of ['domain.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
+  vm.createContext(context);for(const name of ['domain.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','backup-core.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
   return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
     bodies.set(key,json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:'https://ircc-services.canada.ca/api'}});
     await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:'https://ircc-services.canada.ca/api',status:200,mimeType:'application/json'}});
@@ -52,6 +52,23 @@ async function harness(saved){
   await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7,resume:false},sender);
   assert.equal(updates[1].url,'https://ircc-services.canada.ca/2/ast');
   assert.ok((await h.send('openTrackerPage',{windowId:1})).error,'Web pages cannot use extension navigation command');
+}
+// Restore replaces only backup-owned data, with rollback on write failure.
+{
+  const h=await harness(),api=h.context.chrome;
+  const p={id:'restored',label:'Demo',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-01',country:'China',role:'principalApplicantId',noGivenName:false};
+  const data={format:'ircc-local-data',version:1,applications:[p],captures:{},comparisons:{},autoFill:true,uiLanguage:'en'};
+  const local={applications:[],mailConnection:{email:'kept@example.com'},'comparison:profile:old':{value:1}},session={'capture:7':{value:1}};
+  api.storage.local.get=async()=>structuredClone(local);api.storage.session.get=async()=>structuredClone(session);
+  api.storage.local.set=async values=>Object.assign(local,values);api.storage.session.set=async values=>Object.assign(session,values);
+  const sender={url:'chrome-extension://test/settings.html'};
+  assert.equal((await h.sendExtension({action:'restoreBackup',data},sender)).ok,true);
+  assert.equal(local.applications[0].id,'restored');assert.equal(local.mailConnection.email,'kept@example.com');assert.equal(session['capture:7'],null);assert.equal(local['comparison:profile:old'],null);
+  const before=JSON.stringify(local);let fail=true;
+  api.storage.local.set=async values=>{if(fail){fail=false;throw Error('quota');}Object.assign(local,values);};
+  const changed={...data,applications:[{...p,id:'other'}]};
+  assert.equal((await h.sendExtension({action:'restoreBackup',data:changed},sender)).error,'backup.write');assert.equal(JSON.stringify(local),before);
+  assert.equal((await h.send('restoreBackup',{data})).error,'backup.permission');
 }
 // All four records in one response: no detail/history traversal, no waiting for an unrelated request.
 let app=await harness();assert.equal((await app.send('start')).ok,true);assert.equal(app.reloads,1);await app.hang();await app.respond(wrapped);await app.send('overview',{application:{number:'TEST'},applicants:roster});

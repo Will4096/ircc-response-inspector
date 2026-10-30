@@ -16,4 +16,4 @@ document.getElementById('clearData').onclick=async()=>{
 };
 chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;if(changes.autoFill)automatic.checked=!!changes.autoFill.newValue;if(changes.uiLanguage)general('已保存');});
 void I18n.init().catch(error=>setMessage(error.message,'error'));
-I18n.onChange(()=>{general(generalSource);message.textContent=msg(messageSource);document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+' · '+t('开发预览');for(const id of ['aboutHelp','mailSetupGuide'])document.getElementById(id).href=I18n.language==='en'?'MAIL-SETUP.en.md':'MAIL-SETUP.md';});
+I18n.onChange(()=>{general(generalSource);message.textContent=msg(messageSource);document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+' · '+t('开发预览');for(const id of ['aboutHelp','mailSetupGuide'])document.getElementById(id).href=I18n.language==='en'?'mail-help.en.html':'mail-help.html';});

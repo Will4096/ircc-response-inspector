@@ -15,20 +15,21 @@
     $('mailConnect').textContent=t(busy?'正在连接…':gmail?clientValid()?(state.state==='reauth'?'重新授权 Gmail':'连接 Gmail 并启用'):'配置 Gmail 连接':state.state==='error'?'重新验证连接':connection.verifiedAt && stored.email===value.email && stored.provider==='163' && !$('mailPassword').value?'启用邮箱辅助':'验证连接并启用');
     $('mailDisconnectArea').hidden=!connection.verifiedAt && !stored.enabled;
     for(const id of ['mailEnabled','mailProvider','mailEmail','mailClientId','mailPassword','mailConnect','mailHelperStatus','mailDisconnect'])$(id).disabled=busy;
+    if(!gmail&&connection.helperReady!==true)$('mailConnect').hidden=true;
     $('mailStatus').textContent=t(noticeKey);$('mailStatus').dataset.tone=noticeTone;
-    $('mailSetupGuide').href=I18n.language==='en'?'MAIL-SETUP.en.md':'MAIL-SETUP.md';
+    $('mailSetupGuide').href=I18n.language==='en'?'mail-help.en.html':'mail-help.html';
   }
   async function load(keepDraft=false){
     const current=++revision,info=await send({action:'mailSettings'});if(current!==revision)return;
-    stored=info.config;connection=info.connection || {};
+    stored=info.config;connection={helperReady:connection.helperReady,...(info.connection || {})};
     if(!keepDraft){$('mailEnabled').checked=!!stored.enabled;$('mailProvider').value=stored.provider || '163';$('mailEmail').value=stored.email || '';$('mailClientId').value=stored.clientId || '';}
     $('mailExtensionId').textContent=info.extensionId;$('mailRedirect').textContent=info.redirect;
     helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';render();
   }
-  async function run(work,progress,success,rollback=false){
+  async function run(work,progress,success,rollback=false,keepDraft=false){
     if(busy)return;busy=true;notice(progress,'busy');render();
-    try{await work();await load();notice(success,'success');}
-    catch(error){if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
+    try{await work();await load(keepDraft);notice(success,'success');}
+    catch(error){if(error.message==='mail.helper')connection.helperReady=false;helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
     finally{busy=false;render();}
   }
   function validate(value){
@@ -56,7 +57,8 @@
   };
   $('mailHelperStatus').onclick=()=>{
     if(busy)return;const permission=chrome.permissions.request({permissions:['nativeMessaging']});
-    void run(async()=>{if(!await permission)throw new Error('mail.permission');await send({action:'mailHelperStatus'});helperKey='本机程序可用';},'正在检查本机程序…','本机程序可用，可以继续连接邮箱。');
+    helperKey='正在检查本机程序…';
+    void run(async()=>{if(!await permission)throw new Error('mail.permission');const result=await send({action:'mailHelperStatus'});connection.helperReady=true;connection.configured=!!result.configured;helperKey='本机程序可用';},'正在检查本机程序…','本机程序可用，可以继续连接邮箱。',false,true);
   };
   $('mailDisconnect').onclick=()=>void run(async()=>{
     const result=await send({action:'mailDisconnect'});$('mailPassword').value='';
@@ -65,5 +67,6 @@
   chrome.storage.onChanged.addListener((changes,area)=>{
     if(area==='local' && (changes.mailAssist || changes.mailConnection) && !busy)void load(!changes.mailAssist).catch(()=>notice('无法读取邮箱设置，请刷新后重试。','error'));
   });
+  $('mailExtensionId').textContent=chrome.runtime.id || '';
   I18n.onChange(render);void load().catch(()=>notice('无法读取邮箱设置，请刷新后重试。','error'));
 })();

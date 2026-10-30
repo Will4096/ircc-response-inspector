@@ -11,6 +11,7 @@ var UIModel={
   },
   mail(config,connection={},draft={}){
     if(!draft.enabled)return {state:'off',label:'未开启',help:'默认关闭。开启后先完成连接，才会读取匹配的验证邮件。'};
+    if(draft.provider==='163'&&connection.helperReady===false)return {state:'error',label:'本机程序未连接',help:'检查 Windows 本机程序，或继续手动输入验证码。'};
     if(draft.hasPassword || !config.enabled || draft.email!==config.email || draft.provider!==config.provider || draft.clientId!==config.clientId)return {state:'setup',label:'待配置',help:'完成连接后生效，当前仍可手动输入验证码。'};
     if(connection.error==='mail.auth')return {state:'reauth',label:'需要重新授权',help:'Gmail 授权暂不可用，请重新连接；手动输入不受影响。'};
     if(connection.error)return {state:'error',label:'连接需要检查',help:'上次连接失败，请重新验证，或手动输入验证码。'};

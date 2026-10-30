@@ -34,7 +34,7 @@ for(const file of ['popup.html','options.html','settings.html']){
   if(file==='popup.html'){assert.ok(!html.includes('settings-panel'));assert.ok(!html.includes('languageSettings'));}
   assert.ok(html.indexOf('src="i18n.js"')<html.indexOf('src="'+(file==='popup.html'?'popup.js':file==='options.html'?'options.js':'settings.js')+'"'));
 }
-for(const file of ['popup.js','options.js','settings.js','ui-model.js','mail-options.js'])for(const match of (await read(file)).matchAll(/t\('((?:\\.|[^'])*)'\)/g)){
+for(const file of ['popup.js','options.js','settings.js','ui-model.js','mail-options.js','backup-ui.js'])for(const match of (await read(file)).matchAll(/t\('((?:\\.|[^'])*)'\)/g)){
   const key=vm.runInNewContext("'"+match[1]+"'");
   if(/[\u3400-\u9fff]/.test(key))assert.notEqual(popup.c.I18n.t(key),key,file+': '+key);
 }

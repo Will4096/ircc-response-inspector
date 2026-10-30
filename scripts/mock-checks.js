@@ -27,6 +27,35 @@
         assert(w.document.documentElement.dataset.surface==='panel'&&w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' '+stage+' side panel fits '+width+'px');
       }
     }
+    w=await load('/settings.html?mail=error');await settle();
+    const $=id=>w.document.getElementById(id);
+    $('mailPassword').value='synthetic-app-password';$('mailEmail').value='example@163.com';
+    await $('mailHelperStatus').onclick();await settle();
+    assert($('mailHelperState').textContent==='本机程序未连接'&&$('mailConnect').hidden,'helper failure has consistent state and no invalid connect button');
+    assert($('mailPassword').value==='synthetic-app-password','helper failure preserves typed password');
+    assert($('mailExtensionId').textContent==='synthetic-preview'&&$('mailSetupGuide').getAttribute('href')==='mail-help.html','extension ID and readable HTML help link available');
+    w=await load('/settings.html');await settle();
+    $('mailEnabled').checked=true;$('mailEnabled').onchange();$('mailEmail').value='example@163.com';$('mailPassword').value='synthetic-app-password';
+    $('mailHelperStatus').onclick();await settle();await settle();
+    assert($('mailHelperState').textContent==='本机程序可用'&&$('mailEnabled').checked&&$('mailEmail').value==='example@163.com'&&$('mailPassword').value==='synthetic-app-password','helper success preserves unsaved setup and enables next step');
+    const data=w.Backup.collect(await w.chrome.storage.local.get(null),await w.chrome.storage.session.get(null));
+    // Crypto is tested with real WebCrypto in backup-tests.mjs. Isolate UI state from virtual-time scheduling.
+    const encrypted='synthetic encrypted fixture';
+    w.Backup.decrypt=async(text,password)=>{if(password!=='synthetic-backup-password')throw Error('backup.decrypt');return data;};
+    const transfer=new w.DataTransfer();transfer.items.add(new w.File([encrypted],'demo.irccbackup',{type:'application/json'}));
+    let restores=0;const send=w.chrome.runtime.sendMessage;w.chrome.runtime.sendMessage=async message=>{if(message.action==='restoreBackup')restores++;return send(message);};
+    $('backupMode').value='import';$('backupMode').dispatchEvent(new w.Event('change'));$('backupFile').files=transfer.files;$('backupPassword').value='synthetic-backup-password';
+    await $('backupAction').onclick();assert(!$('backupPreview').hidden&&restores===0,'encrypted import previews before any write');
+    $('backupCancel').onclick();assert($('backupPreview').hidden&&restores===0,'cancel does not restore');
+    $('backupPassword').value='wrong-password';await $('backupAction').onclick();assert($('backupPreview').hidden&&restores===0,'wrong password cannot restore');
+    $('backupPassword').value='synthetic-backup-password';await $('backupAction').onclick();await $('backupConfirm').onclick();assert(restores===1&&$('backupPreview').hidden,'explicit confirmation restores once');
+    w=await load('/mail-help.html');assert(w.document.characterSet==='UTF-8'&&w.document.body.textContent.includes('先安装，再连接'),'Chinese help renders as UTF-8 HTML');
+    w=await load('/mail-help.en.html');assert(w.document.documentElement.lang==='en','English help is a separate page');
+    for(const lang of ['zh','en']){
+      frame.style.width='350px';w=await load('/settings.html?mail=error&lang='+lang);await settle();
+      assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' settings and backup fit narrow viewport');
+    }
+    frame.style.width='850px';w=await load('/settings.html');await settle();w.document.getElementById('backup').scrollIntoView();
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

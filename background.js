@@ -5,10 +5,12 @@ importScripts('profiles.js');
 importScripts('comparison.js');
 importScripts('scanner.js');
 importScripts('privacy-data.js');
+importScripts('backup-core.js');
 importScripts('mail-core.js');
 importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
+let backupRestoring=false;
 // Remove the mailbox listener and metadata left by 3.1.0–3.1.2 on upgrade.
 async function removeLegacyMailAssist(){
   if(chrome.scripting?.getRegisteredContentScripts){
@@ -106,6 +108,30 @@ function findFields(value, path = '$', found = []) {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
     const id = sender.tab?.id ?? message.tabId;
+    if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm'].includes(message.action))throw Error('backup.busy');
+    if(message.action==='restoreBackup'){
+      if(!mailExtensionSender(sender))throw Error('backup.permission');
+      const data=Backup.clean(message.data);
+      if([...sessions.values()].some(s=>s.active)||verificationLocks.size)throw Error('backup.busy');
+      backupRestoring=true;
+      try{
+        const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
+        const nextLocal={applications:data.applications,selectedApplicationId:data.selectedApplicationId,uiLanguage:data.uiLanguage,autoFill:data.autoFill},nextSession={};
+        for(const key of Object.keys(local))if(key.startsWith('comparison:profile:'))nextLocal[key]=null;
+        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:'))nextSession[key]=null;
+        for(const [id,value] of Object.entries(data.comparisons))nextLocal['comparison:profile:'+id]=value;
+        for(const [id,value] of Object.entries(data.captures))nextSession['capture:profile:'+id]=value;
+        await mailCancelAll();
+        try{
+          await chrome.storage.session.set(nextSession);await chrome.storage.local.set(nextLocal);sessions.clear();
+        }catch(error){
+          await chrome.storage.session.set(Object.fromEntries(Object.keys(nextSession).map(k=>[k,session[k]??null])));
+          await chrome.storage.local.set(Object.fromEntries(Object.keys(nextLocal).map(k=>[k,local[k]??null])));
+          throw Error('backup.write');
+        }
+        return {ok:true};
+      }finally{backupRestoring=false;}
+    }
     if(message.action==='openTrackerPage'){
       if(!mailExtensionSender(sender))throw new Error('请从扩展页面操作。');
       const win=await chrome.windows.get(message.windowId);

@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 const root=new URL('../',import.meta.url);
-const assets=new Set(['scanner.js','app.css','popup.css','layout.js','popup.html','options.html','settings.html','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/mock-checks.js']);
+const assets=new Set(['scanner.js','app.css','popup.css','layout.js','popup.html','options.html','settings.html','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','profiles.js','privacy-data.js','backup-core.js','backup-ui.js','mail-help.html','mail-help.en.html','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/mock-checks.js']);
 const wrap=body=>`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Local Tracker simulator</title><style>body{font:16px/1.6 system-ui;max-width:900px;margin:30px auto;padding:20px}label{display:block;margin:12px 0}input,select,button,a{padding:8px}aside{background:#fff3cd;padding:12px}li{margin:12px 0}</style><aside>本地模拟 · 虚构数据 · 非 IRCC 网站。请勿填写真实资料。测试码：123456</aside>${body}<script src="/scanner.js"></script></html>`;
 export function createMockTracker(){return http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;
@@ -23,7 +23,7 @@ export function createMockTracker(){return http.createServer(async(req,res)=>{
   else if(p==='/2/ast-details')body='<h1>Example application</h1><p>Application number: DEMO0001</p><h2>Application status: In Progress</h2>'+['A','B'].map((n,i)=>`<section>Applicant ${n} ${i?'DEP':'PA'} <button id="viewApplicant${i+1}" onclick="location.href='/2/ast-view-application?relation_id=${i+1}'">View</button></section>`).join('');
   else if(p==='/2/ast-view-application')body=`<h1>Applicant ${url.searchParams.get('relation_id')==='2'?'B':'A'}</h1>`+['Biometrics: Completed','Medical exam: Completed','Eligibility: Completed','Background check: In Progress'].map((v,i)=>`<p><button id="help_accordion${i}">${v}</button></p>`).join('')+'<h2>Pending actions to complete 0</h2><a href="/2/ast-history?relation_id='+ (url.searchParams.get('relation_id')==='2'?'2':'1')+'">History</a>';
   else if(p==='/2/ast-history')body='<h1>History</h1><ul><li><h3>Application received</h3>January 1, 2026</li></ul><button id="more" onclick="this.previousElementSibling.insertAdjacentHTML(\'beforeend\',\'<li><h3>Eligibility completed</h3>February 1, 2026</li>\');this.remove()">View more</button>';
-  else if(p==='/checks')body='<h1>Automated local checks</h1><pre id="report">RUNNING</pre><script src="/scripts/mock-checks.js"></script>';
+  else if(p==='/checks')body='<h1>Automated local checks</h1><pre id="report" style="max-height:180px;overflow:auto">RUNNING</pre><script src="/scripts/mock-checks.js"></script>';
   else {res.writeHead(404);res.end('Not found');return;}
   res.end(wrap(body));
 });}

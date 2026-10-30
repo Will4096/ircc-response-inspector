@@ -13,3 +13,5 @@
 - Keep README languages in separate linked files. Record remaining integration limitations honestly, and persist agreed product decisions in PRODUCT.md.
 
 - Use the loopback Tracker simulator and offline regression tests first. Access real IRCC only for targeted compatibility checks that the simulator cannot establish. Keep simulation assets and localhost permissions out of the extension runtime.
+
+- User-facing data exports are password-encrypted backups only. Use authenticated encryption, preview imports before explicit replacement, retain manual fallback, and exclude mailbox credentials/tokens/codes. Never export plaintext profile/query backups.

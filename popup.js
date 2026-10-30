@@ -209,12 +209,7 @@ $('capture').onclick=async()=>{
 };
 $('export').onclick=async()=>{
   try{
-    const data=await send('read');
-    const grouped={...data,applicants:(data.applicants || []).map(person=>({...person,responses:data.responses.filter(record=>person.relationId && record.relationId===person.relationId)}))};
-    const ids=new Set((data.applicants || []).map(person=>person.relationId).filter(Boolean));
-    grouped.unassignedResponses=data.responses.filter(record=>!record.relationId || !ids.has(record.relationId));delete grouped.responses;
-    const url=URL.createObjectURL(new Blob([JSON.stringify(grouped,null,2)],{type:'application/json'}));
-    const link=el('a');link.href=url;link.download='ircc-'+(data.application?.number || 'results')+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),10000);
+    await chrome.tabs.create({url:chrome.runtime.getURL('settings.html#backup')});
   }catch(error){setOutput(error.message);}
 };
 (async()=>{
