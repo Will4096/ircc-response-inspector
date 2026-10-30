@@ -6,6 +6,8 @@ const context={};vm.createContext(context);vm.runInContext(await read('ui-model.
 assert.equal(ui.query('closed',{},false).add,true);
 assert.equal(ui.query('closed',{},true).open,true);
 assert.equal(ui.query('login',{},true).openText,'继续登录');
+assert.equal(ui.query('login',{active:true},true).relogin,true);
+assert.equal(ui.query('expired',{status:'completed'},true).openText,'重新登录 Tracker');
 assert.equal(ui.query('form',{},true).fill,true);
 assert.equal(ui.query('form',{status:'ready'},true).fill,false);
 assert.equal(ui.query('form',{status:'ready'},true).openText,'定位官网 Submit');

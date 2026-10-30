@@ -4,6 +4,15 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    'Tracker 登录已超时，请重新登录。':'Tracker session expired. Please sign in again.',
+    '重新登录':'Sign in again',
+    '重新登录 Tracker':'Sign in to Tracker again',
+    'Tracker 登录已超时':'Tracker session expired',
+    '在原 Tracker 标签页重新登录，所选申请和上次结果会保留。':'Sign in again in the existing Tracker tab. Your selected profile and last results are retained.',
+    '登录超时':'Session expired',
+    '在当前 Tracker 标签页完成登录':'Sign in in the current Tracker tab',
+    '继续当前登录；若已超时，点击重新登录。不会新建标签页。':'Continue signing in, or select Sign in again if the session expired. The existing tab will be reused.',
+    '需要登录':'Sign-in required',
     'Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。':'Tracker is using an older extension script. Reload the search form, review it and click the official Submit button.',
     '重新加载查询表单':'Reload search form',
     '定位官网 Submit':'Locate official Submit',

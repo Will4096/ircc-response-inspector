@@ -1,3 +1,8 @@
+function readTrackerSessionState(){
+  if(location.origin!=='https://ircc-services.canada.ca')return {expired:false};
+  const text=(document.body.innerText||'').slice(0,16000).replace(/\s+/g,' ');
+  return {expired:/(?:your\s+)?session\s+(?:(?:has|is)\s+)?(?:expired|timed\s+out)|(?:votre\s+)?session\s+(?:a\s+expir[ée]|est\s+expir[ée]e)|会话已(?:过期|超时)|登录已(?:过期|超时)/i.test(text)};
+}
 function readVerificationState(){
   const text=(document.body.innerText || '').replace(/\s+/g,' ');
   const message=text.match(/(?:The verification code you entered does not match the code we sent you\.?|(?:The )?(?:verification )?code (?:has expired|is invalid|is incorrect)\.?|too many (?:unsuccessful )?attempts)/i)?.[0] || '';

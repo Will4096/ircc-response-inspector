@@ -20,3 +20,5 @@
 - Show a persistent masked saved-state marker for stored app passwords; never read the actual secret back into the UI. Separate saved connection state from request binding, polling and candidate confirmation.
 
 - A trusted submit is pending until Tracker reaches verification: polling must not cancel its binding on the search page or during persistence. Use the observed submit time, protect newer requests from stale cancellation, and check the page observer version after extension updates. Submission stays on the official page; locating Submit must never click it.
+
+- Route all Tracker open/resume/relogin actions through the same current-window resolver. Preserve established tab identity across GCKey redirects, reuse that tab for restart, never persist authentication URLs/parameters, and never replace a visibly unrelated page or another window's tab.

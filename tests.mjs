@@ -60,6 +60,26 @@ async function harness(saved){
   assert.equal(updates[1].url,'https://ircc-services.canada.ca/2/ast');
   assert.ok((await h.send('openTrackerPage',{windowId:1})).error,'Web pages cannot use extension navigation command');
 }
+// Authentication recovery reuses only this window's established Tracker tab.
+{
+  const h=await harness(),api=h.context.chrome,db={},updates=[],created=[];let current={id:17,windowId:1,url:'https://ircc-services.canada.ca/2/ast-search'};
+  api.windows={get:async id=>({id})};api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
+  api.tabs.get=async id=>{if(id!==current.id)throw Error('closed');return {...current};};
+  api.tabs.query=async options=>options.windowId===current.windowId?[{...current}]:[];
+  api.tabs.update=async(id,change)=>{updates.push({id,...change});current={...current,...change};return {...current};};api.tabs.create=async options=>{created.push(options);return {id:18,...options};};
+  await h.context.rememberTrackerTab(current);
+  current={id:17,windowId:1};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.equal((await h.sendExtension({action:'resolveTrackerTab',windowId:1},sender)).tabId,17);
+  await h.sendExtension({action:'openTrackerPage',windowId:1,resume:false},sender);
+  assert.equal(created.length,0);assert.equal(updates[0].id,17);assert.equal(updates[0].url,'https://ircc-services.canada.ca/2/ast');
+  current.url='https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic-expired';
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:true},sender);assert.equal(updates[1].url,undefined,'Continue does not reset a valid login');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(updates[2].url,'https://ircc-services.canada.ca/2/ast','Restart never reuses an expired authentication request');
+  assert.equal(created.length,0);assert.ok(!JSON.stringify(db).includes('synthetic-expired'),'No authentication URLs or parameters persisted');
+  current.url='https://work.example/';
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(created.length,1,'Never replace a visibly unrelated page');
+}
 // Restore replaces only backup-owned data, with rollback on write failure.
 {
   const h=await harness(),api=h.context.chrome;
@@ -147,6 +167,7 @@ const cachedA={...sample,profileId:'A',application:{number:'APP-A',title:'Result
 const cachedB={...sample,profileId:'B',application:{number:'APP-B',title:'Result B'}};
 let cachedBAvailable=false,holdA=false;
 popup.chrome.runtime.sendMessage=async message=>{
+  if(message.action==='openTrackerPage'){navigations++;return {ok:true,tabId:7};}
   if(message.action==='getContext')return {stage:'results'};
   if(message.action==='read'){
     if(message.profileId==='A' && holdA){holdA=false;return new Promise(resolve=>releaseStale=resolve);}

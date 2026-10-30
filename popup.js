@@ -6,6 +6,8 @@ let outputSource='';
 function setOutput(source){outputSource=source || '';output.textContent=msg(outputSource);output.dataset.tone=/无法|失败|错误|不正确|过期|未完成|请输入|请先/.test(outputSource)?'error':'info';}
 let targetTabId;
 let queryWindowId;
+let entryBusy=false;
+const inWorkspace=typeof location!=='undefined'&&new URLSearchParams(location.search).get('embedded')==='1';
 const isSidePanel=typeof location!=='undefined'&&new URLSearchParams(location.search).get('surface')==='panel';
 let lastSnapshot='';
 let verificationBusy=false;
@@ -67,16 +69,18 @@ function historyDetails(person,responses,changes=[]){
 }
 function renderContext(context,data={}){
   currentContext=context || {stage:'closed'};
+  const complete=data.status==='completed'&&currentContext.stage==='results';
   const state=UIModel.query(currentContext.stage,data,!!$('application').value);
   $('entryTitle').textContent=t(state.title);$('entryState').textContent=t(state.help);
-  $('stageLabel').hidden=data.status==='completed';$('stageLabel').textContent=t(state.label);$('stageLabel').dataset.state=state.label==='已完成'?'connected':state.label==='等待验证码'?'setup':'';
+  $('stageLabel').hidden=complete;$('stageLabel').textContent=t(state.label);$('stageLabel').dataset.state=state.label==='已完成'?'connected':['等待验证码','登录超时','需要登录'].includes(state.label)?'setup':'';
   $('addFirstProfile').hidden=!state.add;$('openTracker').hidden=!state.open;$('openTracker').textContent=t(state.openText);
+  $('reloginTracker').hidden=!state.relogin;
   $('fill').hidden=!state.fill;$('fill').disabled=!!data.active || !$('application').value;
   $('verifyForm').hidden=!state.verify;$('resultActions').hidden=!state.capture;$('stopCapture').hidden=!state.stop;
   $('fill').textContent=t(currentContext.stage==='role'?'填写申请资料':'填入 Tracker');
   $('code').disabled=!!data.active || verificationBusy;$('verify').disabled=!!data.active || verificationBusy;$('capture').disabled=!!data.active || verificationBusy;
-  $('querySteps').hidden=state.add || data.status==='completed';$('entryTitle').closest?.('.task-area')?.setAttribute('data-complete',String(data.status==='completed'));
-  for(const node of document.querySelectorAll?.('#querySteps li') || []){const step=Number(node.dataset.step);node.dataset.current=String(step===state.step);node.dataset.complete=String(step<state.step || data.status==='completed');}
+  $('querySteps').hidden=state.add || complete;$('entryTitle').closest?.('.task-area')?.setAttribute('data-complete',String(complete));
+  for(const node of document.querySelectorAll?.('#querySteps li') || []){const step=Number(node.dataset.step);node.dataset.current=String(step===state.step);node.dataset.complete=String(step<state.step || complete);}
   if(currentContext.pageNotice?.kind==='filled'&&/手动选择|无法|失败/.test(currentContext.pageNotice.text||''))$('entryState').textContent=msg(currentContext.pageNotice.text);
   if(currentContext.pageNotice?.kind==='pageError')$('entryState').textContent=t('Tracker 页面暂未就绪，请检查官网提示，必要时刷新。');
   if(currentContext.observerReady===false){$('entryState').textContent=t('Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。');$('openTracker').hidden=false;$('openTracker').textContent=t('重新加载查询表单');$('fill').hidden=true;$('verifyForm').hidden=true;}
@@ -173,20 +177,24 @@ $('fill').onclick=async()=>{
   catch(error){setOutput(error.message);}
   finally{$('fill').textContent=t('填入 Tracker');$('fill').disabled=false;lastSnapshot='';await refreshCapture().catch(error=>setOutput(error.message));}
 };
-async function openTracker(){
-  const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*',...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});
-  let existing;
-  if(targetTabId){try{const target=await chrome.tabs.get(targetTabId);if(/^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(target.url || ''))existing=target;}catch{}}
-  existing=existing || tabs.find(tab=>tab.active) || tabs[0];
-  if(existing){await chrome.runtime.sendMessage({action:'stop',tabId:existing.id});await chrome.tabs.update(existing.id,{active:true,url:'https://ircc-services.canada.ca/2/ast'});await chrome.windows.update(existing.windowId,{focused:true});targetTabId=existing.id;}
-  else{const created=await chrome.tabs.create({url:'https://ircc-services.canada.ca/2/ast'});targetTabId=created.id;}
+async function requestTrackerEntry(resume=false){
+  if(entryBusy)return;entryBusy=true;$('openTracker').disabled=true;$('reloginTracker').disabled=true;
+  try{
+  let windowId=queryWindowId;
+  if(windowId===undefined&&targetTabId!==undefined)try{windowId=(await chrome.tabs.get(targetTabId)).windowId;}catch{}
+  if(windowId===undefined)windowId=(await chrome.windows.getCurrent()).id;
+  const result=await chrome.runtime.sendMessage({action:'openTrackerPage',windowId,tabId:targetTabId,resume});
+  if(result?.error)throw Error(result.error);targetTabId=result.tabId;lastSnapshot='';await refreshCapture();
+  }finally{entryBusy=false;$('openTracker').disabled=false;$('reloginTracker').disabled=false;}
 }
+async function openTracker(){await requestTrackerEntry(false);}
 $('openTracker').onclick=async()=>{try{
+  if(currentContext.stage==='expired'){await requestTrackerEntry(false);return;}
   if(currentContext.observerReady===false){if(currentContext.stage==='verification')await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});else await chrome.tabs.reload(targetTabId);return;}
   if(currentContext.stage==='form'&&displayedCapture?.status==='ready'){
     const result=await send('locateSubmit');setOutput(result?.ok?'请在 Tracker 官网核对资料，再点击高亮的 Submit。':'未找到官网 Submit，请检查左侧表单是否完整。');return;
   }
-  if(!isSidePanel&&chrome.sidePanel?.open&&queryWindowId!==undefined){
+  if(!isSidePanel&&!inWorkspace&&chrome.sidePanel?.open&&queryWindowId!==undefined){
     // Both calls start inside the click gesture; the worker owns navigation if the popup closes.
     const navigation=chrome.runtime.sendMessage({action:'openTrackerPage',windowId:queryWindowId,tabId:targetTabId,resume:!!targetTabId&&['login','form','role'].includes(currentContext.stage)});
     const panel=chrome.sidePanel.open({windowId:queryWindowId}).then(()=>true,()=>false);
@@ -197,10 +205,11 @@ $('openTracker').onclick=async()=>{try{
     lastSnapshot='';await refreshCapture();return;
   }
   if(targetTabId && ['login','form','role'].includes(currentContext.stage)){
-    const tab=await chrome.tabs.get(targetTabId);await chrome.tabs.update(targetTabId,{active:true});if(tab.windowId!==undefined)await chrome.windows.update(tab.windowId,{focused:true});
+    await requestTrackerEntry(true);
   }else await openTracker();
   lastSnapshot='';await refreshCapture();
 }catch(error){setOutput(error.message);}};
+$('reloginTracker').onclick=async()=>{try{await requestTrackerEntry(false);}catch(error){setOutput(error.message);}};
 $('stopCapture').onclick=async()=>{try{await send('stop');lastSnapshot='';await refreshCapture();}catch(error){setOutput(error.message);}};
 $('verifyForm').onsubmit=async event=>{
   event.preventDefault();const code=$('code').value.trim();

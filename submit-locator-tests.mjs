@@ -7,3 +7,8 @@ assert.equal(c.locateTrackerSubmit().ok,true);assert.equal(focus,1);assert.equal
 c.location.origin='http://127.0.0.1';assert.equal(c.locateTrackerSubmit().ok,false);assert.equal(focus,1);
 c.location.origin='https://ircc-services.canada.ca';c.location.pathname='/2/ast-otp-verification';assert.equal(c.locateTrackerSubmit().ok,false);
 console.log('PASS: official search-only locator highlights/focuses without clicking; other origins/routes remain blocked.');
+vm.runInContext(await fs.readFile(new URL('scanner.js',import.meta.url),'utf8'),c);
+c.location.origin='https://ircc-services.canada.ca';c.document.body={innerText:'Your session has expired. Please sign in again.'};assert.equal(c.readTrackerSessionState().expired,true);
+c.document.body.innerText='Your application is in progress. Sessions may expire after inactivity.';assert.equal(c.readTrackerSessionState().expired,false);
+c.location.origin='https://gc.auth.canada.ca';Object.defineProperty(c.document,'body',{get(){throw Error('Do not inspect authentication page content');}});assert.equal(c.readTrackerSessionState().expired,false);
+console.log('PASS: explicit Tracker expiry detection; no expiry inference from generic help or authentication-page content.');

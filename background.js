@@ -10,6 +10,23 @@ importScripts('mail-core.js');
 importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
+const trackerRelevant=url=>{try{const u=new URL(url);return u.protocol==='https:'&&['ircc-services.canada.ca','gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(u.hostname);}catch{return false;}};
+async function rememberTrackerTab(tab){
+  if(tab?.id===undefined||tab.windowId===undefined||!trackerRelevant(tab.url))return;
+  const key='tracker:window:'+tab.windowId,saved=(await chrome.storage.session.get(key))[key];
+  if(saved?.tabId!==tab.id)await chrome.storage.session.set({[key]:{tabId:tab.id}});
+}
+async function findTrackerTab(windowId,tabId){
+  const key='tracker:window:'+windowId,saved=(await chrome.storage.session.get(key))[key];
+  const accept=tab=>tab?.windowId===windowId&&(trackerRelevant(tab.url)||(!tab.url&&saved?.tabId===tab.id));
+  for(const id of [...new Set([tabId,saved?.tabId].filter(id=>id!==undefined))]){
+    try{const tab=await chrome.tabs.get(id);if(accept(tab))return tab;}catch{}
+  }
+  const active=await chrome.tabs.query({active:true,windowId});
+  if(accept(active[0])){await rememberTrackerTab(active[0]);return active[0];}
+  const tabs=await chrome.tabs.query({windowId,url:'https://ircc-services.canada.ca/*'}),found=tabs.find(accept);
+  if(found)await rememberTrackerTab(found);return found;
+}
 let backupRestoring=false;
 // Use Chrome's persistent host from the very first toolbar click. A transient
 // action popup can disappear before handing control over to a side panel.
@@ -140,17 +157,19 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {ok:true};
       }finally{backupRestoring=false;}
     }
+    if(message.action==='resolveTrackerTab'){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const tab=await findTrackerTab(message.windowId,message.tabId);return {tabId:tab?.id};
+    }
     if(message.action==='openTrackerPage'){
       if(!mailExtensionSender(sender))throw new Error('请从扩展页面操作。');
       const win=await chrome.windows.get(message.windowId);
-      const relevant=url=>/^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(url || '');
-      let target;
-      if(id!==undefined){try{const tab=await chrome.tabs.get(id);if(tab.windowId===win.id&&relevant(tab.url))target=tab;}catch{}}
-      if(!target){const tabs=await chrome.tabs.query({windowId:win.id,url:'https://ircc-services.canada.ca/*'});target=tabs.find(tab=>tab.active)||tabs[0];}
+      let target=await findTrackerTab(win.id,id);
       if(target){
-        if(!message.resume){await mailCancel(target.id);if(sessions.get(target.id)?.active)await finish(target.id,'stopped','已停止');}
-        target=await chrome.tabs.update(target.id,{active:true,...(message.resume?{}:{url:'https://ircc-services.canada.ca/2/ast'})});
+        if(!message.resume){await mailCancel(target.id);await chrome.storage.session.remove('pageNotice:'+target.id);if(sessions.get(target.id)?.active)await finish(target.id,'stopped','已停止');}
+        const previous=target;target={...previous,...await chrome.tabs.update(target.id,{active:true,...(message.resume?{}:{url:'https://ircc-services.canada.ca/2/ast'})})};
       }else target=await chrome.tabs.create({windowId:win.id,url:'https://ircc-services.canada.ca/2/ast'});
+      await rememberTrackerTab(target);
       return {ok:true,tabId:target.id};
     }
     if(message.action==='mailConfirm'){
@@ -172,8 +191,20 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     if(message.action==='getContext'){
       let tab;try{tab=await chrome.tabs.get(id);}catch{return {stage:'closed'};}
+      await rememberTrackerTab(tab);
+      if(!tab.url&&tab.windowId!==undefined){const saved=(await chrome.storage.session.get('tracker:window:'+tab.windowId))['tracker:window:'+tab.windowId];if(saved?.tabId===id){if(mailRequests.has(id))await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'login',tabId:id};}}
       let url;try{url=new URL(tab.url);}catch{return {stage:'closed'};}
+      if(['gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(url.hostname)){
+        if(mailRequests.has(id))await mailCancel(id);
+        if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');
+        return {stage:'login',tabId:id};
+      }
       const stages={'/2/ast':'role','/2/ast-search':'form','/2/ast-otp-verification':'verification','/2/ast-details':'results','/2/ast-view-application':'results','/2/ast-history':'results'};
+      let expired=false;
+      if(allowed(tab.url)&&tab.status!=='loading'&&chrome.scripting?.executeScript){
+        try{const result=await chrome.scripting.executeScript({target:{tabId:id},func:readTrackerSessionState});expired=result[0]?.result?.expired===true;}catch{}
+      }
+      if(expired){await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'expired',tabId:id};}
       let observerReady;
       if(tab.status!=='loading'&&allowed(tab.url)&&['/2/ast-search','/2/ast-otp-verification'].includes(url.pathname)){
         try{const health=await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'});observerReady=health?.requestTracking===true&&health.version===chrome.runtime.getManifest().version;}catch{observerReady=false;}
@@ -475,3 +506,6 @@ chrome.tabs.onRemoved.addListener(id => {verificationLocks.delete(id);const stat
 chrome.tabs.onUpdated?.addListener((id,change)=>{
   if(change.url && sessions.get(id)?.active && !allowed(change.url))void finish(id,'failed','查询页面已离开 Tracker，已停止。');
 });
+// Remember only Tracker pages we can identify; keep the same tab identity through authentication redirects.
+chrome.tabs.onUpdated?.addListener((id,change,tab)=>{if(change.url&&allowed(change.url)&&tab?.windowId!==undefined)void rememberTrackerTab({...tab,id,url:change.url}).catch(()=>{});});
+chrome.tabs.onRemoved.addListener((id,info)=>{if(info?.windowId!==undefined)void(async()=>{const key='tracker:window:'+info.windowId,saved=(await chrome.storage.session.get(key))[key];if(saved?.tabId===id)await chrome.storage.session.remove(key);})().catch(()=>{});});
