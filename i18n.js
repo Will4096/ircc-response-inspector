@@ -4,6 +4,7 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '侧栏未能打开，可继续使用当前页面，或从扩展菜单打开侧栏。':'The side panel could not open. Continue here, or open it from the extension menu.',
     '重新验证连接':'Verify connection again',
     '连接需要检查':'Check connection','上次连接失败，请重新验证，或手动输入验证码。':'The last connection failed. Verify it again or enter the code manually.',
     'Gmail 只读授权范围为整个邮箱，程序仅筛选验证邮件。':'Gmail read-only authorization covers the entire mailbox. This tool filters for verification messages.',

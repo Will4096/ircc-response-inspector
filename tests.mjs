@@ -29,11 +29,29 @@ async function harness(saved){
   let handler,network;let url='https://ircc-services.canada.ca/2/ast-details';let detached=0;let reloads=0;const moves=[];const timers=[];const stored=saved?{'capture:7':saved}:{};const bodies=new Map();
   const context={URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
   vm.createContext(context);for(const name of ['domain.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
-  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message){return new Promise(resolve=>handler(message,{},resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
+  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
     bodies.set(key,json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:'https://ircc-services.canada.ca/api'}});
     await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:'https://ircc-services.canada.ca/api',status:200,mimeType:'application/json'}});
     await network({tabId:7},'Network.loadingFinished',{requestId:key});
   },async hang(){await network({tabId:7},'Network.responseReceived',{requestId:'forever',type:'Fetch',response:{url:'https://ircc-services.canada.ca/irrelevant',status:200,mimeType:'application/json'}});}};
+}
+// Side-panel handoff runs in the worker and never reuses a tab in a different window.
+{
+  const h=await harness(),api=h.context.chrome,updates=[],created=[];
+  api.windows={get:async id=>({id})};
+  api.tabs.get=async id=>({id,windowId:99,url:'https://ircc-services.canada.ca/2/ast-search'});
+  api.tabs.query=async options=>{assert.equal(options.windowId,1);return [];};
+  api.tabs.create=async options=>{created.push(options);return {id:8,...options};};
+  api.tabs.update=async(id,options)=>{updates.push(options);return {id,windowId:1,...options};};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.ok((await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7},sender)).ok);
+  assert.equal(created[0].windowId,1);assert.equal(updates.length,0);
+  api.tabs.get=async id=>({id,windowId:1,url:'https://ircc-services.canada.ca/2/ast-search'});
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7,resume:true},sender);
+  assert.equal(updates.length,1);assert.equal(updates[0].url,undefined,'Continue preserves form/session');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7,resume:false},sender);
+  assert.equal(updates[1].url,'https://ircc-services.canada.ca/2/ast');
+  assert.ok((await h.send('openTrackerPage',{windowId:1})).error,'Web pages cannot use extension navigation command');
 }
 // All four records in one response: no detail/history traversal, no waiting for an unrelated request.
 let app=await harness();assert.equal((await app.send('start')).ok,true);assert.equal(app.reloads,1);await app.hang();await app.respond(wrapped);await app.send('overview',{application:{number:'TEST'},applicants:roster});
@@ -147,3 +165,19 @@ await popup.I18n.setLanguage('zh');assert.equal(nodes.get('output').textContent,
 assert.equal(nodes.get('code').value,'482791');
 assert.ok(nodes.get('results').children[0].children[0].children[0].children[1].textContent.includes('Biometrics'));
 console.log('PASS: live bilingual result/status rendering, language-switch error updates, intact manual OTP and untouched IRCC payloads.');
+{
+  const original=popup.chrome.runtime.sendMessage;let clicking=false,opens=0,handoffs=0;
+  vm.runInContext('queryWindowId=1',popup);
+  popup.chrome.runtime.sendMessage=async message=>{
+    if(message.action==='openTrackerPage'){assert.ok(clicking);assert.equal(message.windowId,1);handoffs++;return {ok:true,tabId:7};}
+    return original(message);
+  };
+  popup.chrome.sidePanel={open:async options=>{assert.ok(clicking,'Side panel starts inside click, before any await');assert.equal(options.windowId,1);opens++;}};
+  clicking=true;let pending=nodes.get('openTracker').onclick();clicking=false;await pending;
+  assert.equal(opens,1);assert.equal(handoffs,1);
+  popup.chrome.sidePanel.open=async()=>{throw Error('Gesture rejected');};
+  clicking=true;pending=nodes.get('openTracker').onclick();clicking=false;await pending;
+  assert.equal(handoffs,2);assert.match(nodes.get('output').textContent,/侧栏未能打开/);
+  popup.chrome.runtime.sendMessage=original;delete popup.chrome.sidePanel;
+  console.log('PASS: synchronous side-panel gesture, worker navigation handoff, current-window isolation and manual fallback.');
+}

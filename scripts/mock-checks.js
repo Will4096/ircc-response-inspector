@@ -22,6 +22,10 @@
       assert(Math.abs(box.left-(w.document.documentElement.clientWidth-box.width)/2)<2&&box.width===1080,lang+' '+stage+' tab uses centered shared shell');
       frame.style.width='390px';await settle();
       assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' '+stage+' narrow tab has no page overflow');
+      for(const width of [350,450]){
+        frame.style.width=width+'px';w=await load('/popup.html?surface=panel&lang='+lang+'&stage='+stage);await settle();
+        assert(w.document.documentElement.dataset.surface==='panel'&&w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' '+stage+' side panel fits '+width+'px');
+      }
     }
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}

@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.6.2",
+  "version": "3.7.0",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
   "options_page": "settings.html",
   "content_scripts": [
@@ -50,12 +51,16 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
   },
-  "version_name": "3.6.2-mail-preview",
+  "version_name": "3.7.0-mail-preview",
   "optional_permissions": [
     "identity",
     "nativeMessaging"
   ],
   "optional_host_permissions": [
     "https://gmail.googleapis.com/*"
-  ]
+  ],
+  "side_panel": {
+    "default_path": "popup.html?surface=panel"
+  },
+  "minimum_chrome_version": "116"
 }

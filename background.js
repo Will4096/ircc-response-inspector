@@ -106,6 +106,19 @@ function findFields(value, path = '$', found = []) {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
     const id = sender.tab?.id ?? message.tabId;
+    if(message.action==='openTrackerPage'){
+      if(!mailExtensionSender(sender))throw new Error('请从扩展页面操作。');
+      const win=await chrome.windows.get(message.windowId);
+      const relevant=url=>/^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(url || '');
+      let target;
+      if(id!==undefined){try{const tab=await chrome.tabs.get(id);if(tab.windowId===win.id&&relevant(tab.url))target=tab;}catch{}}
+      if(!target){const tabs=await chrome.tabs.query({windowId:win.id,url:'https://ircc-services.canada.ca/*'});target=tabs.find(tab=>tab.active)||tabs[0];}
+      if(target){
+        if(!message.resume){await mailCancel(target.id);if(sessions.get(target.id)?.active)await finish(target.id,'stopped','已停止');}
+        target=await chrome.tabs.update(target.id,{active:true,...(message.resume?{}:{url:'https://ircc-services.canada.ca/2/ast'})});
+      }else target=await chrome.tabs.create({windowId:win.id,url:'https://ircc-services.canada.ca/2/ast'});
+      return {ok:true,tabId:target.id};
+    }
     if(message.action==='mailConfirm'){
       if(!mailExtensionSender(sender) && !mailTrackerSender(sender))throw new Error('mail.permission');
       message={...message,action:'verify',code:await mailTake(id,message)};

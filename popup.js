@@ -5,6 +5,8 @@ const output=$('output');
 let outputSource='';
 function setOutput(source){outputSource=source || '';output.textContent=msg(outputSource);output.dataset.tone=/无法|失败|错误|不正确|过期|未完成|请输入|请先/.test(outputSource)?'error':'info';}
 let targetTabId;
+let queryWindowId;
+const isSidePanel=typeof location!=='undefined'&&new URLSearchParams(location.search).get('surface')==='panel';
 let lastSnapshot='';
 let verificationBusy=false;
 let profileRevision=0;
@@ -129,7 +131,7 @@ function renderCapture(data){
   }
 }
 async function send(action,extra={}){
-  if(!targetTabId){const [tab]=await chrome.tabs.query({active:true,currentWindow:true});targetTabId=tab?.id;}
+  if(!targetTabId){const [tab]=await chrome.tabs.query({active:true,...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});targetTabId=tab?.id;}
   const result=await chrome.runtime.sendMessage({action,tabId:targetTabId,profileId:$('application').value || undefined,...extra});
   if(result?.error)throw new Error(result.error);return result;
 }
@@ -169,7 +171,7 @@ $('fill').onclick=async()=>{
   finally{$('fill').textContent=t('填入 Tracker');$('fill').disabled=false;lastSnapshot='';await refreshCapture().catch(error=>setOutput(error.message));}
 };
 async function openTracker(){
-  const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*'});
+  const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*',...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});
   let existing;
   if(targetTabId){try{const target=await chrome.tabs.get(targetTabId);if(/^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(target.url || ''))existing=target;}catch{}}
   existing=existing || tabs.find(tab=>tab.active) || tabs[0];
@@ -177,6 +179,16 @@ async function openTracker(){
   else{const created=await chrome.tabs.create({url:'https://ircc-services.canada.ca/2/ast'});targetTabId=created.id;}
 }
 $('openTracker').onclick=async()=>{try{
+  if(!isSidePanel&&chrome.sidePanel?.open&&queryWindowId!==undefined){
+    // Both calls start inside the click gesture; the worker owns navigation if the popup closes.
+    const navigation=chrome.runtime.sendMessage({action:'openTrackerPage',windowId:queryWindowId,tabId:targetTabId,resume:!!targetTabId&&['login','form','role'].includes(currentContext.stage)});
+    const panel=chrome.sidePanel.open({windowId:queryWindowId}).then(()=>true,()=>false);
+    const [result,opened]=await Promise.all([navigation,panel]);
+    if(result?.error)throw new Error(result.error);
+    targetTabId=result.tabId;
+    if(!opened)setOutput('侧栏未能打开，可继续使用当前页面，或从扩展菜单打开侧栏。');
+    lastSnapshot='';await refreshCapture();return;
+  }
   if(targetTabId && ['login','form','role'].includes(currentContext.stage)){
     const tab=await chrome.tabs.get(targetTabId);await chrome.tabs.update(targetTabId,{active:true});if(tab.windowId!==undefined)await chrome.windows.update(tab.windowId,{focused:true});
   }else await openTracker();
@@ -208,12 +220,19 @@ $('export').onclick=async()=>{
 (async()=>{
   await I18n.init();
   await loadApplications();
-  const [current]=await chrome.tabs.query({active:true,currentWindow:true});
+  queryWindowId=(await chrome.windows?.getCurrent?.())?.id;
+  const [current]=await chrome.tabs.query({active:true,...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});
   if(current?.url && /^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(current.url))targetTabId=current.id;
-  else{const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*'});const verificationTabs=tabs.filter(tab=>{try{return new URL(tab.url).pathname==='/2/ast-otp-verification';}catch{return false;}});targetTabId=(verificationTabs.length===1?verificationTabs[0]:tabs.find(tab=>tab.active) || tabs[0])?.id;}
+  else{const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*',...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});const verificationTabs=tabs.filter(tab=>{try{return new URL(tab.url).pathname==='/2/ast-otp-verification';}catch{return false;}});targetTabId=(verificationTabs.length===1?verificationTabs[0]:tabs.find(tab=>tab.active) || tabs[0])?.id;}
   await refreshCapture();
 })().catch(error=>setOutput(error.message));
-setInterval(()=>{if(targetTabId)void refreshCapture().catch(error=>setOutput(error.message));},1000);
+setInterval(()=>{void (async()=>{
+  if(isSidePanel){
+    const [active]=await chrome.tabs.query({active:true,...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});
+    if(active&&/^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(active.url || '')&&targetTabId!==active.id){targetTabId=active.id;$('code').value='';lastSnapshot='';}
+  }
+  if(targetTabId)await refreshCapture();
+})().catch(error=>setOutput(error.message));},1000);
 
 I18n.onChange(()=>{for(const option of $('application').options || [])if(option.value==='')option.textContent=t('选择申请');lastSnapshot='';if(displayedCapture)renderCapture(displayedCapture);setOutput(outputSource);});
 
