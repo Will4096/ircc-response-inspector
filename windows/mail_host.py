@@ -16,6 +16,7 @@ import struct
 import sys
 
 MAX_MESSAGE = 262144
+HELPER_VERSION = '1.2'
 ROOT = Path(os.environ.get('LOCALAPPDATA', '.')) / 'IRCCMailHelper'
 SECRET = ROOT / 'mailbox.dpapi'
 
@@ -149,7 +150,7 @@ def internal_time(metadata):
 def handle(request):
     action = request.get('action')
     if action == 'status':
-        return {'ok': True, 'version': '1.1', 'configured': SECRET.exists()}
+        return {'ok': True, 'version': HELPER_VERSION, 'configured': SECRET.exists()}
     if action == 'clear':
         SECRET.unlink(missing_ok=True)
         return {'ok': True}
@@ -253,6 +254,7 @@ def main():
         # Never expose exception strings (which can contain credentials or body text).
         result = {'error': 'mail.network'}
     diagnostic(result.get('error', 'complete'))
+    result.update({'helperVersion': HELPER_VERSION, 'protocol': 1})
     output = json.dumps(result, ensure_ascii=False).encode('utf-8')
     if len(output) > 1000000:
         output = b'{"error":"mail.network"}'

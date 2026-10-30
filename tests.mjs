@@ -146,6 +146,8 @@ async function harness(saved){
   a.advance(4999);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'No submission before five seconds');
   a.advance(1);assert.equal((await a.send('commitSearchSubmit')).submitted,true);assert.equal(a.clicks(),1);
   await a.send('commitSearchSubmit');assert.equal(a.clicks(),1,'Duplicate commits cannot repeat submission');
+  a=await autoHarness();await a.send('armSearchSubmit');assert.equal((await a.send('commitSearchSubmit',{immediate:true})).submitted,true);assert.equal(a.clicks(),1,'Explicit Submit now skips the wait');await a.send('commitSearchSubmit',{immediate:true});assert.equal(a.clicks(),1);
+  a=await autoHarness();await a.send('armSearchSubmit');a.switchProfile();await a.send('commitSearchSubmit',{immediate:true});assert.equal(a.clicks(),0,'Immediate submission retains profile validation');
   a=await autoHarness();await a.send('armSearchSubmit');await a.send('cancelSearchSubmit');a.advance(6000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);
   a=await autoHarness();await a.send('armSearchSubmit');a.switchProfile();a.advance(5000);assert.equal((await a.send('commitSearchSubmit')).cancelled,true);assert.equal(a.clicks(),0);
   a=await autoHarness();await a.send('armSearchSubmit');a.h.url='https://gc.auth.canada.ca/login';a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);

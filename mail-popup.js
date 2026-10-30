@@ -10,6 +10,7 @@
     waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
     'mail.auth':['Gmail 需要重新授权','Gmail authorization needed','前往设置重新连接，或继续手动输入。','Reconnect in settings, or enter the code manually.'],
     'mail.helper':['本机程序未连接','Local helper unavailable','前往设置检查本机程序，或继续手动输入。','Check the helper in settings, or enter the code manually.'],
+    'mail.version':['本机程序需要更新','Local helper update required','本机程序版本不兼容，请在设置中更新。仍可手动输入验证码。','The helper version is incompatible. Update it in settings, or enter the code manually.'],
     'mail.credentials':['邮箱连接需要检查','Check mailbox connection','前往设置检查授权码和 IMAP，手动输入不受影响。','Check your app password and IMAP in settings. Manual entry is unaffected.'],
     'mail.network':['暂时无法连接邮箱','Mailbox temporarily unavailable','请稍后重试，也可直接手动输入验证码。','Try again later, or enter the code manually.']
   };

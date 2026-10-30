@@ -20,7 +20,7 @@
     switch(message.action){
       case 'armSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId)return {cancelled:true};if(autoPending.phase==='awaiting'){autoPending={...autoPending,phase:'armed',viewId:message.viewId,deadline:Date.now()+5000};}return {pending:{...autoPending}};
       case 'cancelSearchSubmit':autoPending=null;capture.status='ready';return {cancelled:true};
-      case 'commitSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId||autoPending.viewId!==message.viewId)return {cancelled:true};if(Date.now()<autoPending.deadline)return {pending:{...autoPending}};window.__autoSubmitCount++;autoPending=null;stage='verification';capture.status='submitted';return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
+      case 'commitSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId||autoPending.viewId!==message.viewId)return {cancelled:true};if(!message.immediate&&Date.now()<autoPending.deadline)return {pending:{...autoPending}};window.__autoSubmitCount++;autoPending=null;stage='verification';capture.status='submitted';return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
       case 'resolveTrackerTab':return {tabId:authGranted?1:undefined};
       case 'openTrackerPage':return !authGranted&&!message.forceNew?{needsAccess:true}:{ok:true,tabId:1};
       case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};

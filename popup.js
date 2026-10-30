@@ -156,10 +156,12 @@ async function refreshCapture(){
   if(signature!==lastSnapshot){renderCapture(data);lastSnapshot=signature;}
 }
 $('version').textContent='v'+chrome.runtime.getManifest().version;
+let immediateSearchId=null;
 function paintSearchCountdown(p){
   const seconds=p.deadline?Math.max(0,Math.ceil((p.deadline-Date.now())/1000)):5;
   $('autoSubmitText').textContent=t(p.phase==='committing'?'正在提交查询…':'将在 {seconds} 秒后自动提交').replace('{seconds}',seconds);
   $('cancelAutoSubmit').disabled=p.phase==='committing';
+  $('submitSearchNow').disabled=p.phase==='committing'||immediateSearchId===p.id;
 }
 async function cancelCountdown(){
   const p=currentContext.autoSubmit;if(!p)return;delete currentContext.autoSubmit;$('autoSubmitNotice').hidden=true;
@@ -168,6 +170,7 @@ async function cancelCountdown(){
   lastSnapshot='';await refreshCapture();
 }
 $('cancelAutoSubmit').onclick=()=>void cancelCountdown().catch(error=>setOutput(error.message));
+$('submitSearchNow').onclick=()=>{const p=currentContext.autoSubmit;if(!p||p.phase==='committing')return;immediateSearchId=p.id;paintSearchCountdown(p);void tickSearchCountdown().catch(error=>setOutput(error.message));};
 async function tickSearchCountdown(){
   const p=currentContext.autoSubmit;if(!p||countdownBusy)return;
   if(!workspaceVisibilityKnown)return;
@@ -178,9 +181,10 @@ async function tickSearchCountdown(){
     if(p.phase==='awaiting'){
       const result=await send('armSearchSubmit',{submissionId:p.id,viewId:searchViewId});
       if(currentContext.autoSubmit?.id===p.id&&result?.pending){currentContext.autoSubmit=result.pending;paintSearchCountdown(result.pending);}
-    }else if(p.phase==='armed'&&p.deadline<=Date.now()){
+    }else if(p.phase==='armed'&&(p.deadline<=Date.now()||immediateSearchId===p.id)){
       p.phase='committing';paintSearchCountdown(p);
-      const result=await send('commitSearchSubmit',{submissionId:p.id,viewId:searchViewId});
+      const immediate=immediateSearchId===p.id;immediateSearchId=null;
+      const result=await send('commitSearchSubmit',{submissionId:p.id,viewId:searchViewId,immediate});
       if(result?.pending)currentContext.autoSubmit=result.pending;else delete currentContext.autoSubmit;
       if(result?.message)setOutput(result.message);lastSnapshot='';await refreshCapture();
     }

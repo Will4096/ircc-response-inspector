@@ -1,7 +1,7 @@
 (()=>{
   const $=id=>document.getElementById(id),t=I18n.t;
   let stored={enabled:false},connection={},initializing=true,busy=false,editingConnection=false,editingPassword=false,noticeKey='',noticeTone='info',revision=0,helperKey='尚未检查';
-  const errors={'mail.config':'请选择邮箱类型并填写匹配的邮箱地址。','mail.client':'请先完成 Gmail 开发配置。','mail.auth':'Gmail 授权未完成或已失效，请重新连接。','mail.account':'授权的 Gmail 账号与配置不一致。','mail.permission':'未授予所需权限，仍可手动输入验证码。','mail.helper':'本机程序未连接，请查看安装帮助。','mail.windows':'本机程序仅支持 Windows。','mail.network':'邮箱连接失败，请检查网络后重试。','mail.credentials':'连接未通过，请检查客户端授权码和 IMAP 设置。','mail.secret':'请填写 163 客户端授权码。'};
+  const errors={'mail.version':'本机程序版本不兼容，请使用安装帮助中的命令更新。','mail.config':'请选择邮箱类型并填写匹配的邮箱地址。','mail.client':'请先完成 Gmail 开发配置。','mail.auth':'Gmail 授权未完成或已失效，请重新连接。','mail.account':'授权的 Gmail 账号与配置不一致。','mail.permission':'未授予所需权限，仍可手动输入验证码。','mail.helper':'本机程序未连接，请查看安装帮助。','mail.windows':'本机程序仅支持 Windows。','mail.network':'邮箱连接失败，请检查网络后重试。','mail.credentials':'连接未通过，请检查客户端授权码和 IMAP 设置。','mail.secret':'请填写 163 客户端授权码。'};
   const send=async message=>{const result=await chrome.runtime.sendMessage(message);if(result?.error)throw new Error(result.error);return result;};
   const draft=()=>({enabled:$('mailEnabled').checked,provider:$('mailProvider').value,email:$('mailEmail').value.trim().toLowerCase(),clientId:$('mailProvider').value==='gmail'?$('mailClientId').value.trim():''});
   const clientValid=()=>/^[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test($('mailClientId').value.trim());
@@ -44,7 +44,7 @@
   async function run(work,progress,success,rollback=false,keepDraft=false){
     if(busy)return;busy=true;notice(progress,'busy');render();
     try{await work();await load(keepDraft);notice(success,'success');}
-    catch(error){if(error.message==='mail.helper'){connection.helperReady=false;document.getElementById('mailInstallHelp').open=true;}helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
+    catch(error){if(['mail.helper','mail.version'].includes(error.message)){connection.helperReady=false;document.getElementById('mailInstallHelp').open=true;}helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
     finally{busy=false;render();}
   }
   function validate(value){

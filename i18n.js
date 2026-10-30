@@ -19,6 +19,8 @@ globalThis.I18n=(()=>{
     '资料填完后会倒计时 5 秒，随后自动提交。':'After filling, a five-second countdown starts before automatic submission.',
     '取消后可自行检查资料，并在官网手动点击 Submit。':'Cancel to review the details and click Submit on Tracker yourself.',
     '取消自动提交':'Cancel auto-submit',
+    '立即提交':'Submit now',
+    '本机程序版本不兼容，请使用安装帮助中的命令更新。':'The helper version is incompatible. Update it using the command in installation help.',
     '将在 {seconds} 秒后自动提交':'Automatically submitting in {seconds} seconds',
     '正在提交查询…':'Submitting the query…',
     '自动提交已取消，请手动点击官网 Submit。':'Auto-submit cancelled. Click Submit on Tracker when ready.',

@@ -121,6 +121,10 @@
     assert(w.__autoSubmitCount===0,'no automatic submission at countdown start');await new Promise(r=>setTimeout(r,5400));
     countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
     assert(w.__autoSubmitCount===1&&!countdownDoc.getElementById('verifyForm').hidden,'countdown submits once then advances to manual or assisted email verification');
+    w=await load('/workspace.html?surface=panel&countdown=1');await settle();await settle();
+    countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    countdownDoc.getElementById('submitSearchNow').click();countdownDoc.getElementById('submitSearchNow').click();await new Promise(r=>setTimeout(r,500));
+    assert(w.__autoSubmitCount===1&&!countdownDoc.getElementById('verifyForm').hidden,'Submit now skips countdown and suppresses double clicks');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

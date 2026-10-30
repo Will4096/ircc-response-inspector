@@ -162,7 +162,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {pending:searchSubmitMeta(p)};
       }
       if(p.viewId!==message.viewId){await cancelSearchSubmit(id,p.id);return {cancelled:true};}
-      if(p.phase!=='armed'||Date.now()<p.deadline)return {pending:searchSubmitMeta(p)};
+      if(p.phase!=='armed'||(message.immediate!==true&&Date.now()<p.deadline))return {pending:searchSubmitMeta(p)};
       p.phase='committing';clearTimeout(p.timeout);await writeSearchSubmit(p);
       let request;
       try{

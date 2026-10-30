@@ -15,8 +15,9 @@ async function mailNative(payload){
   if((await chrome.runtime.getPlatformInfo()).os!=='win')throw new Error('mail.windows');
   if(!await chrome.permissions.contains({permissions:['nativeMessaging']}))throw new Error('mail.permission');
   try{const result=await chrome.runtime.sendNativeMessage(MAIL_NATIVE,payload);if(result?.error)throw new Error(result.error);
+    if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<2))throw new Error('mail.version');
     mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};return result;}
-  catch(error){if(error.message==='mail.helper'||!/^mail\./.test(error.message))mailNativeStatus={helperReady:false};if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
+  catch(error){if(error.message==='mail.version')mailNativeStatus={helperReady:false,error:'mail.version'};else if(error.message==='mail.helper'||!/^mail\./.test(error.message))mailNativeStatus={helperReady:false};if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
 }
 async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
 async function mailCancel(tabId,expected){
@@ -150,7 +151,7 @@ async function mailPoll(tabId){
     if(saved?.email===config.email && saved.lastError)await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});
   }catch(error){
     if(mailRequests.get(tabId)!==request)return {status:'off'};
-    secrets.error=['mail.auth','mail.account','mail.credentials','mail.helper','mail.permission','mail.windows','mail.network'].includes(error.message)?error.message:'mail.network';
+    secrets.error=['mail.auth','mail.account','mail.credentials','mail.helper','mail.version','mail.permission','mail.windows','mail.network'].includes(error.message)?error.message:'mail.network';
     await mailDiagnostic(secrets.error);
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(mailRequests.get(tabId)===request && saved?.email===config.email && saved.lastError!==secrets.error)await chrome.storage.local.set({mailConnection:{...saved,lastError:secrets.error}});
@@ -184,6 +185,7 @@ async function mailHandle(message,sender){
       if(config.provider==='163'){
         // Rendering settings must not launch a native process. Show last verified configuration.
         connection.helperReady=mailNativeStatus?.helperReady??(connection.error==='mail.helper'?false:connection.verifiedAt?true:undefined);
+        if(mailNativeStatus?.error)connection.error=mailNativeStatus.error;
         connection.configured=mailNativeStatus?.configured??!!connection.verifiedAt;connection.onDemand=true;
       }
       return {config,connection,extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};
