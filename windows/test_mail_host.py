@@ -51,6 +51,18 @@ class HostTests(unittest.TestCase):
                 self.assertTrue(host.handle({'action': 'clear'})['ok'])
             self.assertFalse(secret.exists())
 
+    def test_reconnect_checks_login_without_reading_mail(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+            secret = Path(directory) / 'test.dpapi'
+            secret.write_bytes(b'fake-encrypted')
+            client = Mock()
+            credentials = json.dumps({'email': 'example@163.com', 'password': 'synthetic-password'}).encode()
+            with patch.object(host, 'SECRET', secret), patch.object(host, 'protect', return_value=credentials), patch.object(host, 'connect', return_value=client):
+                self.assertTrue(host.handle({'action': 'test', 'email': 'example@163.com'})['ok'])
+            client.logout.assert_called_once()
+            client.uid.assert_not_called()
+
     @unittest.skipUnless(sys.platform == 'win32', 'Windows binary framing')
     def test_native_frame(self):
         body = json.dumps({'action': 'status'}).encode()

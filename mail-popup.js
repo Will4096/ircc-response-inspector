@@ -1,26 +1,56 @@
-// Optional verification status only; settings stay in the extension options page.
+// Verification assistance is contextual; configuration stays on the settings page.
 (()=>{
   const box=document.createElement('div');box.id='mailAssistStatus';box.hidden=true;
-  document.getElementById('verifyForm').after(box);let signature='',busy=false;
+  document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
-  const labels={off:'',unbound:['未关联本次验证码请求。请在 Tracker 重新提交申请信息，或手动输入。','No request binding. Submit the application details in Tracker again, or enter the code manually.'],waiting:['正在等待本次验证邮件，仍可手动输入。','Waiting for this verification email. Manual entry remains available.'],'mail.auth':['Gmail 授权已失效，请到扩展设置重新授权；仍可手动输入。','Gmail authorization is unavailable. Reauthorize in extension options, or enter the code manually.'],'mail.helper':['本机程序未连接，仍可手动输入。','Local helper unavailable. Enter the code manually.'],'mail.credentials':['请检查邮箱授权码和 IMAP 设置。','Check the app password and IMAP settings.'],'mail.network':['邮箱连接失败，仍可手动输入。','Mailbox connection failed. Manual entry remains available.']};
+  const labels={
+    unbound:['未关联本次请求','Request not linked','请在 Tracker 重新提交申请资料，或直接手动输入验证码。','Submit the application form in Tracker again, or enter the code manually.'],
+    waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
+    'mail.auth':['Gmail 需要重新授权','Gmail authorization needed','前往设置重新连接，或继续手动输入。','Reconnect in settings, or enter the code manually.'],
+    'mail.helper':['本机程序未连接','Local helper unavailable','前往设置检查本机程序，或继续手动输入。','Check the helper in settings, or enter the code manually.'],
+    'mail.credentials':['邮箱连接需要检查','Check mailbox connection','前往设置检查授权码和 IMAP，手动输入不受影响。','Check your app password and IMAP in settings. Manual entry is unaffected.'],
+    'mail.network':['暂时无法连接邮箱','Mailbox temporarily unavailable','请稍后重试，也可直接手动输入验证码。','Try again later, or enter the code manually.']
+  };
+  function node(tag,text,parent=box){const e=document.createElement(tag);if(text)e.textContent=text;parent.append(e);return e;}
   async function tick(){
-    if(busy || typeof targetTabId==='undefined' || !targetTabId)return;busy=true;
+    if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
+    if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';return;}
+    busy=true;
     try{
-      if(currentContext.stage!=='verification'){box.hidden=true;signature='';return;}
-      const data=await send('mailPoll');if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}const next=JSON.stringify([data,I18n.language]);if(next===signature)return;signature=next;
+      const data=await send('mailPoll');
+      if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}
+      const key=JSON.stringify([data,I18n.language]);if(key===signature)return;signature=key;
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
-      const p=document.createElement('p');p.textContent=labels[data.status]?.[I18n.language==='en'?1:0] || say('请核对候选验证码后确认。','Review the candidate code before confirming.');box.append(p);
-      if(data.status!=='candidates')return;
-      const target=document.createElement('strong');target.textContent=say('目标申请：','Target profile: ')+(document.getElementById('application').selectedOptions[0]?.textContent || '');box.append(target);
-      if(data.candidates.length>1){const note=document.createElement('p');note.textContent=say('多个候选，请自行核对。','Multiple candidates. Choose after reviewing.');box.append(note);}
-      for(const c of data.candidates){
-        const row=document.createElement('p');row.textContent=c.code+' · Tracker · '+I18n.date(c.receivedAt);box.append(row);
-        const button=document.createElement('button');button.type='button';button.textContent=say('验证并查询','Verify and check');box.append(button);
-        button.onclick=async()=>{for(const b of box.querySelectorAll('button'))b.disabled=true;try{await send('mailConfirm',{requestId:data.requestId,candidateId:c.id});}catch{setOutput('验证未完成，请检查验证码后重试。');}finally{signature='';void tick();}};
+      if(data.status!=='candidates'){
+        const text=labels[data.status] || labels['mail.network'];
+        node('strong',text[I18n.language==='en'?1:0]);node('p',text[I18n.language==='en'?3:2]);
+        if(data.status.startsWith('mail.')){const link=node('a',say('前往设置','Open settings'));link.href='settings.html';link.target='_blank';}
+        return;
       }
-      const ignore=document.createElement('button');ignore.type='button';ignore.textContent=say('忽略','Ignore');box.append(ignore);ignore.onclick=async()=>{try{await send('mailIgnore',{requestId:data.requestId});}finally{signature='';void tick();}};
-    }catch{box.hidden=true;}finally{busy=false;}
+      node('strong',say('核对邮箱验证码','Review email verification code'));
+      node('p',say('目标申请：','Target profile: ')+(document.getElementById('application').selectedOptions[0]?.textContent || ''));
+      let chosen=data.candidates.length===1?data.candidates[0]:null;
+      if(!chosen)node('p',say('找到多个候选，请选择与本次请求匹配的一项。','Multiple candidates found. Choose the one matching this request.'));
+      const confirm=document.createElement('button');confirm.type='button';confirm.className='primary';confirm.textContent=say('验证并查询','Verify and check');confirm.disabled=!chosen;
+      for(const c of data.candidates){
+        const row=node('div');row.className='mail-candidate';
+        if(data.candidates.length>1){const label=node('label',undefined,row),radio=document.createElement('input');radio.type='radio';radio.name='mailCandidate';radio.style.marginRight='8px';radio.onchange=()=>{chosen=c;confirm.disabled=false;};label.append(radio);node('code',c.code,label);}
+        else node('code',c.code,row);
+        node('small',say('用途：Tracker 查询验证','Purpose: Tracker verification'),row);
+        node('small',say('收信时间：','Received: ')+I18n.date(c.receivedAt),row);
+      }
+      node('p',say('请确认目标申请和邮件用途，再提交验证码。','Confirm the target profile and message purpose before submitting.'));
+      box.append(confirm);
+      confirm.onclick=async()=>{
+        if(!chosen || sending)return;sending=true;verificationBusy=true;for(const b of box.querySelectorAll('button,input'))b.disabled=true;
+        document.getElementById('code').value='';renderContext(currentContext,displayedCapture || {});
+        try{await send('mailConfirm',{requestId:data.requestId,candidateId:chosen.id});}
+        catch{setOutput('验证未完成，请检查验证码后重试。');}
+        finally{sending=false;verificationBusy=false;signature='';lastSnapshot='';await refreshCapture().catch(()=>{});void tick();}
+      };
+      const ignore=node('button',say('忽略本次候选','Ignore candidates'));ignore.type='button';ignore.onclick=async()=>{if(sending)return;try{await send('mailIgnore',{requestId:data.requestId});}catch{setOutput('验证未完成，请检查验证码后重试。');}finally{signature='';void tick();}};
+    }catch{signature='';box.hidden=false;box.replaceChildren();node('p',say('邮箱辅助暂不可用，仍可手动输入验证码。','Email assistance is unavailable. You can still enter the code manually.'));}
+    finally{busy=false;}
   }
   setInterval(tick,1500);I18n.onChange(()=>{signature='';void tick();});
 })();

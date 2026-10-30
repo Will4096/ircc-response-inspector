@@ -68,7 +68,7 @@ class Element{constructor(tag){this.tag=tag;this.children=[];this.dataset={};thi
 const html=await read('popup.html');const ids=[...html.matchAll(/id="([^"]+)"/g)].map(match=>match[1]);assert.equal(ids.length,new Set(ids).size);assert.ok(!ids.includes('settings'));
 const nodes=new Map(ids.map(id=>[id,new Element(id)]));const intervals=[];
 const popup={URL,Date,document:{getElementById:id=>nodes.get(id),createElement:tag=>new Element(tag)},chrome:{runtime:{getManifest:()=>manifest},storage:{local:{get:async()=>({applications:[]})}},tabs:{query:async()=>[]}},setInterval:fn=>intervals.push(fn)};
-vm.createContext(popup);vm.runInContext(await read('i18n.js'),popup);vm.runInContext(await read('domain.js'),popup);vm.runInContext(await read('popup.js'),popup);
+vm.createContext(popup);vm.runInContext(await read('i18n.js'),popup);vm.runInContext(await read('domain.js'),popup);vm.runInContext(await read('ui-model.js'),popup);vm.runInContext(await read('popup.js'),popup);
 const sample={active:false,status:'completed',application:{number:'TEST'},applicants:roster.map((person,index)=>({...person,relationId:String(index+1),status:'completed',checks:{biometrics:'Completed',medical:'Completed',eligibility:'Completed',background:'In Progress',security:'DO NOT USE CHECKS'},historyLoaded:true,history:index?[]:[...payload(0).history,...history],pendingActions:0})),responses:[],errors:[]};
 popup.renderCapture(sample);let rows=nodes.get('results').children[0].children[1].children;assert.equal(rows.length,8);assert.equal(rows[0].children[5].children[0].textContent,'18');assert.equal(rows[2].children[5].children[0].textContent,'无记录');
 assert.equal(rows[1].hidden,true);const icon=rows[0].children[7].children[0];icon.onclick();assert.equal(rows[1].hidden,false);assert.equal(icon.attributes['aria-expanded'],'true');assert.equal(rows[1].children[0].children[0].children[1].children.length,27);
@@ -106,10 +106,10 @@ popup.chrome.runtime.sendMessage=async message=>{
 popup.chrome.storage.local.set=async()=>{};
 popup.chrome.tabs.query=async()=>[{id:7,url:'https://ircc-services.canada.ca/2/ast-details'}];popup.chrome.tabs.get=async()=>({id:7,windowId:1,url:'https://ircc-services.canada.ca/2/ast-details'});
 popup.chrome.tabs.update=async(id,change)=>{if(change.url){assert.equal(change.url,'https://ircc-services.canada.ca/2/ast');navigations++;}};popup.chrome.windows={update:async()=>{}};
-nodes.get('application').value='A';popup.renderCapture(cachedA);nodes.get('application').value='B';await nodes.get('application').onchange();assert.equal(nodes.get('results').children[0].textContent,'暂无结果');assert.equal(nodes.get('export').disabled,true);assert.equal(navigations,1);
+nodes.get('application').value='A';popup.renderCapture(cachedA);nodes.get('application').value='B';await nodes.get('application').onchange();assert.equal(nodes.get('results').children[0].textContent,'暂无结果');assert.equal(nodes.get('export').disabled,true);assert.equal(navigations,0);
 cachedBAvailable=true;nodes.get('application').value='A';await nodes.get('application').onchange();assert.equal(nodes.get('applicationTitle').textContent,'Result A');
-holdA=true;const staleRead=popup.refreshCapture();nodes.get('application').value='B';await nodes.get('application').onchange();releaseStale(cachedA);await staleRead;assert.equal(nodes.get('applicationTitle').textContent,'Result B');assert.equal(navigations,1);
-await nodes.get('openTracker').onclick();assert.equal(navigations,2,'Open Tracker navigates to the query entry, not just focus');
+holdA=true;const staleRead=popup.refreshCapture();nodes.get('application').value='B';await nodes.get('application').onchange();releaseStale(cachedA);await staleRead;assert.equal(nodes.get('applicationTitle').textContent,'Result B');assert.equal(navigations,0);
+await nodes.get('openTracker').onclick();assert.equal(navigations,1,'Explicit Open Tracker navigates; selecting profiles does not navigate');
 console.log('PASS: per-profile cache, wrong-application isolation, empty-profile reopening, rapid-switch stale response suppression, and Open Tracker navigation.');
 
 // Worker completion persists comparison once; opening or polling never acknowledges it.

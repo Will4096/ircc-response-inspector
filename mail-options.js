@@ -1,40 +1,69 @@
 (()=>{
-  const $=id=>document.getElementById(id),say=(zh,en)=>I18n.language==='en'?en:zh;
-  const status=$('mailStatus');let busy=false;
-  const errors={
-    'mail.config':['请选择邮箱类型并填写匹配的邮箱地址。','Choose a provider and enter a matching email address.'],
-    'mail.client':['请填写有效的 Google OAuth Client ID。','Enter a valid Google OAuth Client ID.'],
-    'mail.auth':['请重新授权 Gmail。','Authorize Gmail again.'],
-    'mail.account':['授权的 Gmail 账号与配置不一致。','The authorized Gmail account does not match.'],
-    'mail.permission':['请授予所需权限。','Grant the required optional permissions.'],
-    'mail.helper':['未连接本机程序，请先运行 Windows 安装脚本。','Local helper unavailable. Run the Windows installer first.'],
-    'mail.windows':['本机程序仅支持 Windows。','The local helper supports Windows only.'],
-    'mail.network':['邮箱连接失败，请稍后重试。','Mailbox connection failed. Try again later.'],
-    'mail.credentials':['邮箱授权码无效，或未开启 IMAP。','Invalid app password, or IMAP is disabled.'],
-    'mail.secret':['请填写客户端授权码。','Enter the mailbox app password.']
-    ,'mail.cleanup':['已断开。程序不可用，请运行 Windows 卸载脚本清除残留授权。','Disconnected. Run the Windows uninstaller to clear credentials left by the unavailable helper.']
+  const $=id=>document.getElementById(id),t=I18n.t;
+  let stored={enabled:false},connection={},busy=false,noticeKey='',noticeTone='info',revision=0,helperKey='尚未检查';
+  const errors={'mail.config':'请选择邮箱类型并填写匹配的邮箱地址。','mail.client':'请先完成 Gmail 开发配置。','mail.auth':'Gmail 授权未完成或已失效，请重新连接。','mail.account':'授权的 Gmail 账号与配置不一致。','mail.permission':'未授予所需权限，仍可手动输入验证码。','mail.helper':'本机程序未连接，请查看安装帮助。','mail.windows':'本机程序仅支持 Windows。','mail.network':'邮箱连接失败，请检查网络后重试。','mail.credentials':'连接未通过，请检查客户端授权码和 IMAP 设置。','mail.secret':'请填写 163 客户端授权码。'};
+  const send=async message=>{const result=await chrome.runtime.sendMessage(message);if(result?.error)throw new Error(result.error);return result;};
+  const draft=()=>({enabled:$('mailEnabled').checked,provider:$('mailProvider').value,email:$('mailEmail').value.trim().toLowerCase(),clientId:$('mailProvider').value==='gmail'?$('mailClientId').value.trim():''});
+  const clientValid=()=>/^[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test($('mailClientId').value.trim());
+  function notice(key,tone='info'){noticeKey=key;noticeTone=tone;$('mailStatus').textContent=t(key);$('mailStatus').dataset.tone=tone;}
+  function render(){
+    const value=draft(),gmail=value.provider==='gmail',state=UIModel.mail(stored,connection,{...value,hasPassword:!!$('mailPassword').value});
+    $('mailState').textContent=t(state.label);$('mailState').dataset.state=state.state;$('mailStateHelp').textContent=t(state.help);
+    $('mailConfig').hidden=!value.enabled;$('gmailSettings').hidden=!gmail;$('neteaseSettings').hidden=gmail;
+    $('gmailSetupHint').hidden=clientValid();$('mailHelperState').textContent=t(helperKey);
+    $('mailConnect').hidden=state.state==='connected' && !$('mailPassword').value;
+    $('mailConnect').textContent=t(busy?'正在连接…':gmail?clientValid()?(state.state==='reauth'?'重新授权 Gmail':'连接 Gmail 并启用'):'配置 Gmail 连接':state.state==='error'?'重新验证连接':connection.verifiedAt && stored.email===value.email && stored.provider==='163' && !$('mailPassword').value?'启用邮箱辅助':'验证连接并启用');
+    $('mailDisconnectArea').hidden=!connection.verifiedAt && !stored.enabled;
+    for(const id of ['mailEnabled','mailProvider','mailEmail','mailClientId','mailPassword','mailConnect','mailHelperStatus','mailDisconnect'])$(id).disabled=busy;
+    $('mailStatus').textContent=t(noticeKey);$('mailStatus').dataset.tone=noticeTone;
+    $('mailSetupGuide').href=I18n.language==='en'?'MAIL-SETUP.en.md':'MAIL-SETUP.md';
+  }
+  async function load(keepDraft=false){
+    const current=++revision,info=await send({action:'mailSettings'});if(current!==revision)return;
+    stored=info.config;connection=info.connection || {};
+    if(!keepDraft){$('mailEnabled').checked=!!stored.enabled;$('mailProvider').value=stored.provider || '163';$('mailEmail').value=stored.email || '';$('mailClientId').value=stored.clientId || '';}
+    $('mailExtensionId').textContent=info.extensionId;$('mailRedirect').textContent=info.redirect;
+    helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';render();
+  }
+  async function run(work,progress,success,rollback=false){
+    if(busy)return;busy=true;notice(progress,'busy');render();
+    try{await work();await load();notice(success,'success');}
+    catch(error){if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
+    finally{busy=false;render();}
+  }
+  function validate(value){
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email) || (value.provider==='163' && !/^[^@]+@163\.com$/.test(value.email))){$('mailEmail').focus();throw new Error('mail.config');}
+  }
+  $('mailEnabled').onchange=()=>{
+    if($('mailEnabled').checked){notice('');render();return;}
+    const value={...draft(),enabled:false};
+    void run(async()=>{await send({action:'mailSave',config:value});},'正在关闭邮箱辅助…','邮箱辅助已关闭。',true);
   };
-  const send=async message=>{const r=await chrome.runtime.sendMessage(message);if(r?.error)throw new Error(r.error);return r;};
-  const config=()=>({enabled:$('mailEnabled').checked,provider:$('mailProvider').value,email:$('mailEmail').value,clientId:$('mailClientId').value});
-  async function run(work){if(busy)return;busy=true;for(const b of document.querySelectorAll('[data-mail-button]'))b.disabled=true;status.textContent='';try{await work();status.textContent=say('已完成。','Done.');}catch(error){const pair=errors[error.message] || errors['mail.network'];status.textContent=pair[I18n.language==='en'?1:0];}finally{busy=false;for(const b of document.querySelectorAll('[data-mail-button]'))b.disabled=false;$('mailPassword').value='';}}
-  function render(){const enabled=$('mailEnabled').checked;const gmail=$('mailProvider').value==='gmail';$('gmailSettings').hidden=!enabled || !gmail;$('neteaseSettings').hidden=!enabled || gmail;$('mailEmailRow').hidden=!enabled;}
-  $('mailProvider').onchange=render;$('mailEnabled').onchange=()=>{render();if(!$('mailEnabled').checked)void run(()=>send({action:'mailSave',config:{enabled:false}}));};
-  $('mailSave').onclick=()=>run(()=>send({action:'mailSave',config:config()}));
-  $('mailAuthorize').onclick=()=>{
-    // Permission requests occur synchronously in a deliberate user gesture.
-    const permission=chrome.permissions.request({permissions:['identity'],origins:['https://gmail.googleapis.com/*']});
-    void run(async()=>{if(!await permission)throw new Error('mail.permission');await send({action:'mailAuthorize',config:config()});await send({action:'mailSave',config:config()});});
-  };
-  $('mailSetup163').onclick=()=>{
-    const permission=chrome.permissions.request({permissions:['nativeMessaging']});
-    void run(async()=>{if(!await permission)throw new Error('mail.permission');await send({action:'mailSetup163',config:config(),password:$('mailPassword').value});await send({action:'mailSave',config:config()});});
+  for(const id of ['mailProvider','mailEmail','mailClientId','mailPassword'])$(id).addEventListener(id==='mailProvider'?'change':'input',()=>{notice('');render();});
+  $('mailConnect').onclick=()=>{
+    if(busy)return;const value=draft();
+    if(value.provider==='gmail' && !clientValid()){$('mailAdvanced').open=true;$('mailClientId').focus();notice('请先完成 Gmail 开发配置。');return;}
+    try{validate(value);if(value.provider==='163' && !$('mailPassword').value && !(connection.verifiedAt && stored.email===value.email && stored.provider==='163')){$('mailPassword').focus();throw new Error('mail.secret');}}
+    catch(error){notice(errors[error.message],'error');return;}
+    const permission=chrome.permissions.request(value.provider==='gmail'?{permissions:['identity'],origins:['https://gmail.googleapis.com/*']}:{permissions:['nativeMessaging']});
+    void run(async()=>{
+      if(!await permission)throw new Error('mail.permission');
+      if(value.provider==='gmail')await send({action:'mailAuthorize',config:value});
+      else if($('mailPassword').value)await send({action:'mailSetup163',config:value,password:$('mailPassword').value});
+      else await send({action:'mailTest163',config:value});
+      await send({action:'mailSave',config:value});$('mailPassword').value='';
+    },value.provider==='gmail'?'等待 Gmail 授权…':'正在验证 163 连接…','邮箱已连接，辅助取码已开启。');
   };
   $('mailHelperStatus').onclick=()=>{
-    const permission=chrome.permissions.request({permissions:['nativeMessaging']});
-    void run(async()=>{if(!await permission)throw new Error('mail.permission');await send({action:'mailHelperStatus'});});
+    if(busy)return;const permission=chrome.permissions.request({permissions:['nativeMessaging']});
+    void run(async()=>{if(!await permission)throw new Error('mail.permission');await send({action:'mailHelperStatus'});helperKey='本机程序可用';},'正在检查本机程序…','本机程序可用，可以继续连接邮箱。');
   };
-  $('mailDisconnect').onclick=()=>run(async()=>{const result=await send({action:'mailDisconnect'});$('mailEnabled').checked=false;render();if(!result.helperCleared)throw new Error('mail.cleanup');});
-  async function load(){const info=await send({action:'mailSettings'});const c=info.config;$('mailEnabled').checked=!!c.enabled;$('mailProvider').value=c.provider || 'gmail';$('mailEmail').value=c.email || '';$('mailClientId').value=c.clientId || '';$('mailExtensionId').textContent=info.extensionId;$('mailRedirect').textContent=info.redirect;render();}
-  void load().catch(()=>{});I18n.onChange(render);
-  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local' && changes.mailAssist)void load().catch(()=>{});});
+  $('mailDisconnect').onclick=()=>void run(async()=>{
+    const result=await send({action:'mailDisconnect'});$('mailPassword').value='';
+    if(!result.helperCleared){await load();throw new Error('mail.helper');}
+  },'正在移除本地连接…','本地邮箱连接已移除。');
+  chrome.storage.onChanged.addListener((changes,area)=>{
+    if(area==='local' && (changes.mailAssist || changes.mailConnection) && !busy)void load(!changes.mailAssist).catch(()=>notice('无法读取邮箱设置，请刷新后重试。','error'));
+  });
+  I18n.onChange(render);void load().catch(()=>notice('无法读取邮箱设置，请刷新后重试。','error'));
 })();

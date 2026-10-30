@@ -291,6 +291,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       } finally {verificationLocks.delete(id);}
     }
     if (message.action === 'stop') {
+      await mailCancel(id);
       if(sessions.get(id)?.active)await finish(id,'stopped','已停止');
       return {ok:true};
     }

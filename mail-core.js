@@ -24,7 +24,10 @@ var MailCore=(()=>{
     return found.filter((item,index)=>found.findIndex(other=>other.code===item.code)===index);
   }
   function normalizeConfig(value){
-    if(!value?.enabled)return {enabled:false};
+    if(!value?.enabled){
+      if(!['gmail','163'].includes(value?.provider))return {enabled:false};
+      return {enabled:false,provider:value.provider,email:address(value.email),clientId:value.provider==='gmail'?String(value.clientId || '').trim():''};
+    }
     const email=address(value.email),provider=value.provider;
     if(!['gmail','163'].includes(provider) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new Error('mail.config');
     if(provider==='163' && !/^[^@]+@163\.com$/.test(email))throw new Error('mail.config');

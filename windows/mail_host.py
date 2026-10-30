@@ -120,19 +120,23 @@ def handle(request):
         temporary.write_bytes(encrypted)
         os.replace(temporary, SECRET)
         return {'ok': True}
-    if action != 'poll':
+    if action not in ('poll', 'test'):
         raise ValueError('mail.permission')
     address = account(request.get('email'))
-    since = float(request.get('since', 0))
-    now = dt.datetime.now(dt.timezone.utc).timestamp() * 1000
-    if not now - 300000 <= since <= now + 60000:
-        raise ValueError('mail.stale')
+    if action == 'poll':
+        since = float(request.get('since', 0))
+        now = dt.datetime.now(dt.timezone.utc).timestamp() * 1000
+        if not now - 300000 <= since <= now + 60000:
+            raise ValueError('mail.stale')
     if not SECRET.exists():
         raise ValueError('mail.credentials')
     credentials = json.loads(protect(SECRET.read_bytes(), decrypt=True))
     if credentials['email'] != address:
         raise ValueError('mail.account')
     client = connect(address, credentials['password'])
+    if action == 'test':
+        logout(client)
+        return {'ok': True}
     messages = []
     try:
         date = dt.datetime.fromtimestamp(since / 1000, dt.timezone.utc).strftime('%d-%b-%Y')

@@ -24,7 +24,7 @@ async function mailForget(){
   await mailCancelAll();mailGmailTokens.clear();
   let helperCleared=true;
   if(await chrome.permissions.contains({permissions:['nativeMessaging']}))try{await mailNative({action:'clear'});}catch{helperCleared=false;}
-  await chrome.storage.local.remove('mailAssist');return helperCleared;
+  await chrome.storage.local.remove(['mailAssist','mailConnection']);return helperCleared;
 }
 function mailExtensionSender(sender){return !!sender.url?.startsWith(chrome.runtime.getURL(''));}
 function mailTrackerSender(sender){try{return new URL(sender.url).origin==='https://ircc-services.canada.ca';}catch{return false;}}
@@ -40,6 +40,7 @@ async function mailAuthorize(config){
   const profile=await mailGmailFetch('profile',token);
   if(MailCore.address(profile.emailAddress)!==config.email)throw new Error('mail.account');
   mailGmailTokens.set(config.email,{token,expires:Date.now()+Math.min(Number(params.get('expires_in')) || 3600,3600)*1000-60000});
+  await chrome.storage.local.set({mailConnection:{provider:'gmail',email:config.email,verifiedAt:Date.now()}});
 }
 async function mailGmailFetch(path,token){
   const response=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/'+path,{headers:{Authorization:'Bearer '+token},cache:'no-store',signal:AbortSignal.timeout(15000),redirect:'error'});
@@ -101,7 +102,13 @@ async function mailPoll(tabId){
     const candidates=MailCore.candidates(messages,request,secrets.excluded);
     const filtered=[];for(const c of candidates)if(!(request.consumed || []).includes(await mailDigest(request,c.code)))filtered.push(c);
     secrets.candidates=filtered;delete secrets.error;
-  }catch(error){secrets.error=/^mail\./.test(error.message)?error.message:'mail.network';}
+    const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
+    if(saved?.email===config.email && saved.lastError)await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});
+  }catch(error){
+    secrets.error=['mail.auth','mail.account','mail.credentials','mail.helper','mail.permission','mail.windows','mail.network'].includes(error.message)?error.message:'mail.network';
+    const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
+    if(mailRequests.get(tabId)===request && saved?.email===config.email && saved.lastError!==secrets.error)await chrome.storage.local.set({mailConnection:{...saved,lastError:secrets.error}});
+  }
   finally{mailPollLocks.delete(tabId);}
   if(mailRequests.get(tabId)!==request || !await mailContext(tabId,request))return {status:'off'};
   return display();
@@ -123,18 +130,39 @@ async function mailTake(tabId,message){
 async function mailHandle(message,sender){
   if(!String(message.action).startsWith('mail'))return undefined;
   const extension=mailExtensionSender(sender),tracker=mailTrackerSender(sender),tabId=sender.tab?.id ?? message.tabId;
-  if(['mailSave','mailAuthorize','mailSetup163','mailDisconnect','mailSettings','mailHelperStatus'].includes(message.action)){
+  if(['mailSave','mailAuthorize','mailSetup163','mailTest163','mailDisconnect','mailSettings','mailHelperStatus'].includes(message.action)){
     if(!extension)throw new Error('mail.permission');
-    if(message.action==='mailSettings')return {config:await mailConfig(),extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};
+    if(message.action==='mailSettings'){
+      const config=await mailConfig(),saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
+      const token=mailGmailTokens.get(config.email);const connection={authReady:!!token && token.expires>Date.now(),expiresAt:token?.expires || null,verifiedAt:saved?.email===config.email && saved?.provider===config.provider?saved.verifiedAt:null,error:saved?.email===config.email?saved.lastError:null};
+      if(config.provider==='163' && await chrome.permissions.contains({permissions:['nativeMessaging']})){
+        try{const helper=await mailNative({action:'status'});connection.helperReady=true;connection.configured=!!helper.configured;}catch{connection.helperReady=false;}
+      }
+      return {config,connection,extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};
+    }
     if(message.action==='mailHelperStatus')return mailNative({action:'status'});
     if(message.action==='mailDisconnect')return {ok:true,helperCleared:await mailForget()};
     const config=MailCore.normalizeConfig(message.config);
     if(message.action==='mailAuthorize'){await mailAuthorize(config);return {ok:true};}
     if(message.action==='mailSetup163'){
       if(config.provider!=='163')throw new Error('mail.config');
-      await mailNative({action:'configure',email:config.email,password:message.password});return {ok:true};
+      await mailNative({action:'configure',email:config.email,password:message.password});
+      await chrome.storage.local.set({mailConnection:{provider:'163',email:config.email,verifiedAt:Date.now()}});return {ok:true};
     }
-    if(message.action==='mailSave'){await mailCancelAll();if(!config.enabled)mailGmailTokens.clear();await chrome.storage.local.set({mailAssist:config});return {ok:true};}
+    if(message.action==='mailTest163'){
+      if(config.provider!=='163')throw new Error('mail.config');
+      await mailNative({action:'test',email:config.email});
+      await chrome.storage.local.set({mailConnection:{provider:'163',email:config.email,verifiedAt:Date.now()}});return {ok:true};
+    }
+    if(message.action==='mailSave'){
+      if(config.enabled && config.provider==='163' && (await chrome.storage.local.get('mailConnection')).mailConnection?.lastError)throw new Error('mail.credentials');
+      if(config.enabled && config.provider==='gmail'){const token=mailGmailTokens.get(config.email);if(!token || token.expires<Date.now())throw new Error('mail.auth');}
+      if(config.enabled && config.provider==='163'){
+        const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
+        if(saved?.email!==config.email || saved?.provider!=='163' || !(await mailNative({action:'status'})).configured)throw new Error('mail.credentials');
+      }
+      await mailCancelAll();if(!config.enabled)mailGmailTokens.clear();await chrome.storage.local.set({mailAssist:config});return {ok:true};
+    }
   }
   if(!tracker && !extension)throw new Error('mail.permission');
   if(message.action==='mailTrackRequest'){
