@@ -70,6 +70,7 @@ function historyDetails(person,responses,changes=[]){
   return container;
 }
 function renderContext(context,data={}){
+  if(context?.stage==='verification'&&['查询已提交，正在等待验证码页面。','已开始提交，请等待官网响应。'].includes(outputSource))setOutput('');
   if(currentContext?.stage==='access'&&context?.stage!=='access'&&['未允许识别认证页，现有标签页保持不变。','未找到 Tracker 或官方登录页，请切回原页面，或选择新建 Tracker 页。'].includes(outputSource))setOutput('');
   currentContext=context || {stage:'closed'};
   const complete=data.status==='completed'&&currentContext.stage==='results';

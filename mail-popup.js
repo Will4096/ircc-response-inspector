@@ -6,7 +6,7 @@
   const say=(zh,en)=>I18n.language==='en'?en:zh;
   const labels={
     requesting:['已记录提交，等待 Tracker 验证页面','Submission recorded · waiting for Tracker','Tracker 正在处理本次提交，进入验证码页后再检查邮箱。','Tracker is processing this submission. Email checking starts on the verification page.'],
-    unbound:['邮箱辅助已开启 · 本次请求尚未关联','Email assistance on · query not linked','邮箱连接已配置，但尚未捕获本次查询提交，或本次等待已结束。请重新提交 Tracker 查询表单；也可直接粘贴本次验证码。','Your mailbox is configured, but this query submission was not observed or waiting has ended. Submit the Tracker form again, or paste the code manually.'],
+    unbound:['本次查询未在自动收码中','Automatic code retrieval is not active for this query','如需自动获取，请返回 Tracker 重新提交查询；已收到验证码可直接粘贴，无需重新查询。','To start automatic retrieval, return to Tracker and submit the query again. If you already have the code, paste it here without restarting.'],
     waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
     'mail.auth':['Gmail 需要重新授权','Gmail authorization needed','前往设置重新连接，或继续手动输入。','Reconnect in settings, or enter the code manually.'],
     'mail.helper':['本机程序未连接','Local helper unavailable','前往设置检查本机程序，或继续手动输入。','Check the helper in settings, or enter the code manually.'],
@@ -35,7 +35,7 @@
           node('p',data.diagnostic.checked?say('已检查近期邮件，但尚未匹配本次验证码。','Recent messages checked; no matching code yet.'):say('邮箱服务未返回符合本次时间及发件人范围的邮件。','The mailbox service returned no messages in this request’s time and sender range.'),detail);
           for(const [reason,count] of Object.entries(data.diagnostic.rejected||{}))if(reasons[reason])node('p',say(...reasons[reason])+' · '+count,detail);
         }
-        if(data.status==='unbound'){const restart=node('button',say('返回 Tracker 重新提交','Return to Tracker form'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
+        if(data.status==='unbound'){const restart=node('button',say('重新开始自动收码','Restart automatic code retrieval'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
         if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
         return;
       }

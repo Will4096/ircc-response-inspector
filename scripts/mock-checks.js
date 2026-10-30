@@ -83,7 +83,7 @@
     settingsWindow.document.getElementById('mailCancelEdit').click();
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=unbound');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
     const unbound=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('mailAssistStatus');
-    assert(unbound.textContent.includes('本次请求尚未关联')&&!unbound.querySelector('.mail-loading')&&unbound.querySelector('button'),'unbound request gives a concrete action instead of an endless spinner');
+    assert(unbound.textContent.includes('本次查询未在自动收码中')&&!unbound.querySelector('.mail-loading')&&unbound.querySelector('button'),'unbound request gives a concrete action instead of an endless spinner');
     assert(!w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('export'),'query results do not contain a low-frequency backup action');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&observer=missing');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
     const stale=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
