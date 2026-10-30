@@ -25,6 +25,7 @@
     if(!value.enabled&&hasSaved())$('mailStateHelp').textContent=t('邮箱辅助已关闭，连接信息仍保留。');
     $('gmailSetupHint').hidden=clientValid();$('mailHelperState').textContent=t(helperKey);
     if(connection.error==='mail.version')$('mailHelperState').textContent+=' · '+(I18n.language==='en'?'Received version / protocol: ':'实际版本 / 协议：')+(connection.helperVersion||'—')+' / '+(connection.helperProtocol??'—');
+    if(connection.helperFailure)$('mailHelperState').textContent+=' · Chrome: '+connection.helperFailure;
     $('mailConnect').hidden=!value.enabled||(state.state==='connected'&&!editingPassword&&!editingConnection&&!$('mailPassword').value);
     $('mailConnect').textContent=t(busy?'正在连接…':gmail?clientValid()?(state.state==='reauth'?'重新授权 Gmail':'连接 Gmail 并启用'):'配置 Gmail 连接':state.state==='error'?'重新验证连接':connection.verifiedAt && stored.email===value.email && stored.provider==='163' && !$('mailPassword').value?'启用邮箱辅助':'验证连接并启用');
     $('mailDisconnectArea').hidden=!connection.verifiedAt && !stored.enabled;
@@ -45,7 +46,7 @@
   async function run(work,progress,success,rollback=false,keepDraft=false){
     if(busy)return;busy=true;notice(progress,'busy');render();
     try{await work();await load(keepDraft);notice(success,'success');}
-    catch(error){if(['mail.helper','mail.version'].includes(error.message)){connection.helperReady=false;document.getElementById('mailInstallHelp').open=true;}helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
+    catch(error){if(error.message==='mail.helper')try{await load(true);}catch{}if(['mail.helper','mail.version'].includes(error.message)){connection.helperReady=false;document.getElementById('mailInstallHelp').open=true;}helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
     finally{busy=false;render();}
   }
   function validate(value){

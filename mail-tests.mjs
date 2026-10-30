@@ -46,6 +46,12 @@ context.chrome.runtime.sendNativeMessage=originalNative;
 assert.equal((await context.mailNative({action:'status'})).ok,true);
 assert.equal(persistent.mailConnection.lastError,null,'A compatible reply clears only the stale version error');
 delete persistent.mailConnection;
+for(const [message,reason] of [['Specified native messaging host not found.','not-found'],['Access to the specified native messaging host is forbidden.','forbidden'],['Native host has exited.','exited'],['Error when communicating with the native messaging host.','protocol']]){
+ context.chrome.runtime.sendNativeMessage=async()=>{throw Error(message);};
+ await assert.rejects(()=>context.mailNative({action:'status'}),/mail.helper/);
+ assert.equal(vm.runInContext('mailNativeStatus.reason',context),reason);
+}
+context.chrome.runtime.sendNativeMessage=originalNative;
 const html=MailCore.htmlText('<head><style>999999</style></head><p>Your verification code is <b>123456</b>.</p><img src="https://example.invalid/654321"><script>888888</script>');
 assert.equal(MailCore.candidates([{...good,text:html}],req).length,1);
 assert.equal(html.includes('999999'),false);assert.equal(html.includes('example.invalid'),false);

@@ -23,7 +23,10 @@ async function mailNative(payload){
     mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};
     if(payload.action!=='clear'){const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;if(saved?.lastError==='mail.version')await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});}
     return result;}
-  catch(error){if(error.message==='mail.version')mailNativeStatus={helperReady:false,error:'mail.version'};else if(error.message==='mail.helper'||!/^mail\./.test(error.message))mailNativeStatus={helperReady:false};if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
+  catch(error){if(error.message==='mail.version')mailNativeStatus={helperReady:false,error:'mail.version'};else if(error.message==='mail.helper'||!/^mail\./.test(error.message)){
+    const text=String(error.message||'');const reason=/not found|not registered/i.test(text)?'not-found':/forbidden|denied|blocked/i.test(text)?'forbidden':/exited|failed to start|launch/i.test(text)?'exited':/invalid|communicat|length|json/i.test(text)?'protocol':'unknown';
+    mailNativeStatus={helperReady:false,reason};
+  }if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
 }
 async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
 async function mailCancel(tabId,expected){
@@ -139,7 +142,7 @@ async function mailPoll(tabId){
   if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
   if(mailPage(tab.url)!=='/2/ast-otp-verification'){await mailCancel(tabId,request);return {status:'unbound'};}
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:secrets.error==='mail.helper'?{reason:mailNativeStatus?.reason}:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.candidates.length)return display(); // Waiting for confirmation is not a new fetch demand.
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
@@ -194,6 +197,7 @@ async function mailHandle(message,sender){
         connection.helperReady=mailNativeStatus?.helperReady??(connection.error==='mail.helper'?false:connection.verifiedAt?true:undefined);
         if(mailNativeStatus?.error)connection.error=mailNativeStatus.error;
         connection.helperVersion=mailNativeObserved?.version;connection.helperProtocol=mailNativeObserved?.protocol;
+        connection.helperFailure=mailNativeStatus?.reason;
         connection.configured=mailNativeStatus?.configured??!!connection.verifiedAt;connection.onDemand=true;
       }
       return {config,connection,extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};

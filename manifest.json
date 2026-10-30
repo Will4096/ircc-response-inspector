@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.9.5",
+  "version": "3.9.6",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
@@ -50,7 +50,7 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
   },
-  "version_name": "3.9.5-mail-preview",
+  "version_name": "3.9.6-mail-preview",
   "optional_permissions": [
     "identity",
     "nativeMessaging"
