@@ -20,6 +20,20 @@ assert.throws(()=>MailCore.normalizeConfig({enabled:true,provider:'163',email:'a
 const req={startedAt:time-1000,email:'test@163.com'};
 const good={id:'one',receivedAt:time,from:'IRCC <notice@cic.gc.ca>',to:['test@163.com'],subject:'Application status tracker verification code',text:'Your verification code is 123456.'};
 assert.equal(MailCore.candidates([good],req).length,1);
+// Real IMAP INTERNALDATE drops milliseconds; a same-second arrival is not clearly old.
+const imapRequest={...req,provider:'163',startedAt:Math.floor(time/1000)*1000+750};
+const sameSecond={...good,receivedAt:Math.floor(time/1000)*1000};
+assert.equal(MailCore.candidates([sameSecond],imapRequest,new Set(),imapRequest.startedAt+1000).length,1);
+assert.equal(MailCore.candidates([{...sameSecond,receivedAt:sameSecond.receivedAt-1000}],imapRequest).length,0);
+assert.equal(MailCore.candidates([sameSecond],{...imapRequest,provider:'gmail'}).length,0,'Gmail retains exact timestamp filtering');
+const diagnostic=MailCore.inspect([{...good,to:['different@163.com']},{...good,subject:'Other',text:'Other purpose'}],req).diagnostic;
+assert.equal(diagnostic.rejected.recipient,1);assert.equal(diagnostic.rejected.purpose,1);
+assert.ok(!JSON.stringify(diagnostic).includes('123456')&&!JSON.stringify(diagnostic).includes('@'));
+let nativeSince;const originalNative=context.chrome.runtime.sendNativeMessage;
+context.chrome.runtime.sendNativeMessage=async(name,payload)=>{nativeSince=payload.since;return {messages:[]};};
+await context.mailMessages({provider:'163',email:'test@163.com'},imapRequest);
+assert.equal(nativeSince,Math.floor(imapRequest.startedAt/1000)*1000,'Native prefilter must use the same precision as the matcher');
+context.chrome.runtime.sendNativeMessage=originalNative;
 const html=MailCore.htmlText('<head><style>999999</style></head><p>Your verification code is <b>123456</b>.</p><img src="https://example.invalid/654321"><script>888888</script>');
 assert.equal(MailCore.candidates([{...good,text:html}],req).length,1);
 assert.equal(html.includes('999999'),false);assert.equal(html.includes('example.invalid'),false);

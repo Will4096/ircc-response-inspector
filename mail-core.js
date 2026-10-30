@@ -10,22 +10,28 @@ var MailCore=(()=>{
     const email=String(value || '').match(/^([A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Z0-9.-]+))$/i);
     return !!email && /(?:^|\.)(?:cic\.gc\.ca|canada\.ca)$/.test(email[2].toLowerCase());
   }
-  function candidates(messages,request,excluded=new Set(),now=Date.now()){
-    const found=[];
+  function inspect(messages,request,excluded=new Set(),now=Date.now()){
+    const found=[],rejected={};
+    const skip=reason=>{rejected[reason]=(rejected[reason]||0)+1;};
+    // IMAP INTERNALDATE has second precision. Preserve exact Gmail timestamps.
+    const earliest=request.provider==='163'?Math.floor(request.startedAt/1000)*1000:request.startedAt;
     for(const mail of messages || []){
       const date=Number(mail.receivedAt),text=String(mail.subject || '')+'\n'+String(mail.text || '');
-      if(!senderAllowed(mail.from) || !Number.isFinite(date) || date<request.startedAt || date>now+60000)continue;
-      if(!Array.isArray(mail.to) || !mail.to.some(to=>address(to)===address(request.email)))continue;
+      if(!senderAllowed(mail.from)){skip('sender');continue;}
+      if(!Number.isFinite(date) || date<earliest || date>now+60000){skip('time');continue;}
+      if(!Array.isArray(mail.to) || !mail.to.some(to=>address(to)===address(request.email))){skip('recipient');continue;}
       // Positive Tracker context AND a verification purpose; IRCC + six digits is insufficient.
-      if(!/(?:application\s+status\s+tracker|IRCC\s+tracker|suivi\s+(?:de\s+)?(?:l[’']état|des demandes))/i.test(text))continue;
-      if(!/(?:verification|one[ -]time|security|confirmation)\s*(?:code|password)|code\s+de\s+v[ée]rification/i.test(text))continue;
-      if(/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|permanent\s+residen(?:ce|t)\s+portal|account\s+creation/i.test(text))continue;
+      if(!/(?:application\s+status\s+tracker|IRCC\s+tracker|suivi\s+(?:de\s+)?(?:l[’']état|des demandes))/i.test(text)){skip('purpose');continue;}
+      if(!/(?:verification|one[ -]time|security|confirmation)\s*(?:code|password)|code\s+de\s+v[ée]rification/i.test(text)){skip('purpose');continue;}
+      if(/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|permanent\s+residen(?:ce|t)\s+portal|account\s+creation/i.test(text)){skip('purpose');continue;}
       const digits=[...new Set(text.match(/(?<!\d)\d{6}(?!\d)/g) || [])];
-      if(digits.length!==1 || excluded.has(digits[0]))continue;
+      if(digits.length!==1){skip('digits');continue;}
+      if(excluded.has(digits[0])){skip('excluded');continue;}
       found.push({id:String(mail.id),code:digits[0],receivedAt:date,purpose:'Tracker',sender:String(mail.from).slice(0,200)});
     }
-    return found.filter((item,index)=>found.findIndex(other=>other.code===item.code)===index);
+    return {candidates:found.filter((item,index)=>found.findIndex(other=>other.code===item.code)===index),diagnostic:{checked:(messages||[]).length,rejected}};
   }
+  function candidates(...args){return inspect(...args).candidates;}
   function normalizeConfig(value){
     if(!value?.enabled){
       if(!['gmail','163'].includes(value?.provider))return {enabled:false};
@@ -38,5 +44,5 @@ var MailCore=(()=>{
     if(provider==='gmail' && !/^[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(clientId))throw new Error('mail.client');
     return {enabled:true,provider,email,clientId:provider==='gmail'?clientId:''};
   }
-  return {candidates,normalizeConfig,address,htmlText};
+  return {candidates,inspect,normalizeConfig,address,htmlText};
 })();

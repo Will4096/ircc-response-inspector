@@ -64,7 +64,7 @@ function mailPlain(part){
   return (plain.length?plain:parts.map(mailPlain).filter(Boolean)).join('\n').slice(0,64000);
 }
 async function mailMessages(config,request){
-  if(config.provider==='163')return (await mailNative({action:'poll',email:config.email,since:request.startedAt})).messages || [];
+  if(config.provider==='163')return (await mailNative({action:'poll',email:config.email,since:Math.floor(request.startedAt/1000)*1000})).messages || [];
   const auth=mailGmailTokens.get(config.email);
   if(!auth || auth.expires<Date.now())throw new Error('mail.auth');
   const q='after:'+Math.floor(request.startedAt/1000)+' {from:(cic.gc.ca) from:(canada.ca)}';
@@ -126,7 +126,7 @@ async function mailPoll(tabId){
   if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
   if(mailPage(tab.url)!=='/2/ast-otp-verification'){await mailCancel(tabId,request);return {status:'unbound'};}
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.candidates.length)return display(); // Waiting for confirmation is not a new fetch demand.
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
@@ -134,7 +134,8 @@ async function mailPoll(tabId){
     const messages=await mailMessages(config,request);
     secrets.checkedAt=Date.now();
     if(mailRequests.get(tabId)!==request || !await mailContext(tabId,request))return {status:'off'};
-    const candidates=MailCore.candidates(messages,request,secrets.excluded);
+    const inspection=MailCore.inspect(messages,request,secrets.excluded);secrets.diagnostic=inspection.diagnostic;
+    const candidates=inspection.candidates;
     const filtered=[];for(const c of candidates)if(!(request.consumed || []).includes(await mailDigest(request,c.code)))filtered.push(c);
     secrets.candidates=filtered;delete secrets.error;
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;

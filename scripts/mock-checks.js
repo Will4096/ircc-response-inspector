@@ -76,6 +76,7 @@
     w.document.querySelector('[data-view="popup.html"]').click();await settle();await new Promise(r=>setTimeout(r,1700));
     const queryWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;
     assert(queryWindow.document.querySelector('#mailAssistStatus .mail-loading'),'verification shows an active waiting indicator');
+    assert(queryWindow.document.querySelector('#mailAssistStatus details').textContent.includes('邮箱服务未返回'),'waiting explains empty transport results without exposing message data');
     queryWindow.document.getElementById('openSettings').click();await settle();
     assert(!settingsFrame.hidden&&opened===0,'query settings action stays inside the same workspace');
     assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,'single workspace fits the narrow side panel');

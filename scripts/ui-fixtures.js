@@ -32,7 +32,7 @@
       case 'clearLocalData':changes({applications:[],autoFill:false,mailAssist:{enabled:false},uiLanguage:'zh'});return {ok:true,helperCleared:true};
       case 'removeProfile':{const next=data.applications.filter(p=>p.id!==message.profileId);changes({applications:next});return {ok:true,applications:next};}
       case 'getContext':return {stage,...(query.get('observer')==='missing'?{observerReady:false}:{}),...(autoPending?{autoSubmit:{...autoPending}}:{})};case 'read':return capture;
-      case 'mailPoll':return data.mailAssist.enabled?{status:query.get('poll')||'waiting',checkedAt:Date.now()}:{status:'off'};
+      case 'mailPoll':return data.mailAssist.enabled?{status:query.get('poll')||'waiting',checkedAt:Date.now(),diagnostic:{checked:0,rejected:{}}}:{status:'off'};
       case 'stop':capture={...capture,active:false,status:'stopped'};return {ok:true};
       case 'fill':capture={...capture,status:'ready'};return {ok:true,message:'请确认申请信息，点击 Submit 后继续。'};
       case 'start':case 'verify':capture={...capture,active:true,status:'capturing'};setTimeout(()=>{capture={...capture,active:false,status:'completed'};stage='results';},900);return {ok:true};

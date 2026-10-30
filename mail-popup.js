@@ -28,6 +28,12 @@
         const text=labels[data.status] || labels['mail.network'];
         const heading=node('strong',text[I18n.language==='en'?1:0]);if(['waiting','requesting'].includes(data.status))heading.className='mail-loading';node('p',text[I18n.language==='en'?3:2]);
         if(data.status==='waiting'&&data.checkedAt)node('small',say('上次检查：','Last checked: ')+I18n.date(data.checkedAt));
+        if(data.status==='waiting'&&data.diagnostic){
+          const reasons={sender:['发件人不匹配','Sender not matched'],time:['收信时间不匹配','Receipt time not matched'],recipient:['收件人不匹配','Recipient not matched'],purpose:['未确认 Tracker 验证用途','Tracker verification purpose unconfirmed'],digits:['验证码缺失或存在多个数字','Missing code or ambiguous numbers'],excluded:['候选码已忽略或已尝试','Candidate ignored or already attempted']};
+          const detail=node('details');node('summary',say('邮箱检查详情','Email check details'),detail);
+          node('p',data.diagnostic.checked?say('已检查近期邮件，但尚未匹配本次验证码。','Recent messages checked; no matching code yet.'):say('邮箱服务未返回符合本次时间及发件人范围的邮件。','The mailbox service returned no messages in this request’s time and sender range.'),detail);
+          for(const [reason,count] of Object.entries(data.diagnostic.rejected||{}))if(reasons[reason])node('p',say(...reasons[reason])+' · '+count,detail);
+        }
         if(data.status==='unbound'){const restart=node('button',say('返回 Tracker 重新提交','Return to Tracker form'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
         if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
         return;
