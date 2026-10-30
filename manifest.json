@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.8.2",
+  "version": "3.8.3",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
@@ -50,13 +50,15 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
   },
-  "version_name": "3.8.2-mail-preview",
+  "version_name": "3.8.3-mail-preview",
   "optional_permissions": [
     "identity",
     "nativeMessaging"
   ],
   "optional_host_permissions": [
-    "https://gmail.googleapis.com/*"
+    "https://gmail.googleapis.com/*",
+    "https://gc.auth.canada.ca/*",
+    "https://clegc-gckey.gc.ca/*"
   ],
   "side_panel": {
     "default_path": "workspace.html?surface=panel"

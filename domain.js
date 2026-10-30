@@ -1,3 +1,4 @@
+var TrackerAuthOrigins=['https://gc.auth.canada.ca/*','https://clegc-gckey.gc.ca/*'];
 const CHECK_KEYS=['biometrics','medical','eligibility','background'];
 function checkValue(value){
   if(value===null || value===undefined || typeof value==='object')return undefined;

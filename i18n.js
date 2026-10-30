@@ -4,6 +4,15 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '首次需安装一次。取码、连接或检查时按需启动，完成后退出。':'Install once. The helper runs only to fetch a code, connect or check, then exits.',
+    '按需启动':'Runs on demand',
+    '先关联当前 Tracker 登录页':'Link the current Tracker sign-in page',
+    'Chrome 尚未允许识别认证页地址。允许后将关联原标签页，不读取登录表单。':'Chrome has not granted access to identify the sign-in page URL. Allow access to link the existing tab. The extension does not read sign-in forms.',
+    '需要页面授权':'Page access needed',
+    '识别当前登录页':'Identify current sign-in page',
+    '新建 Tracker 页':'New Tracker tab',
+    '未允许识别认证页，现有标签页保持不变。':'Sign-in page access was not allowed. Existing tabs were left unchanged.',
+    '未找到 Tracker 或官方登录页，请切回原页面，或选择新建 Tracker 页。':'No supported Tracker or sign-in page was found. Switch to the existing page, or choose New Tracker tab.',
     'Tracker 登录已超时，请重新登录。':'Tracker session expired. Please sign in again.',
     '重新登录':'Sign in again',
     '重新登录 Tracker':'Sign in to Tracker again',

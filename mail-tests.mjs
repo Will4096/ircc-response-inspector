@@ -4,12 +4,13 @@ import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
 const read=name=>fs.readFile(new URL(name,import.meta.url),'utf8');
 const stored={},persistent={},events=[];let mailbox=[],polls=0,url='https://ircc-services.canada.ca/2/ast-otp-verification',time=Date.now();
+const nativeActions=[];
 class Clock extends Date{static now(){return time;}}
 const get=(db,key)=>key===null?{...db}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in db).map(k=>[k,db[k]]));
 const storage=db=>({get:async key=>get(db,key),set:async value=>Object.assign(db,JSON.parse(JSON.stringify(value))),remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete db[k];}});
 const context={URL,URLSearchParams,Date:Clock,Map,Set,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,atob,AbortSignal,normalizeApplicationNumber:s=>String(s || '').replace(/[^a-z0-9]/gi,'').toUpperCase(),chrome:{
   storage:{session:storage(stored),local:storage(persistent),onChanged:{addListener:fn=>events.push(fn)}},
-  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{if(payload.action==='poll'){polls++;return {messages:mailbox};}return {ok:true};}},
+  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{nativeActions.push(payload.action);if(payload.action==='poll'){polls++;return {messages:mailbox};}return {ok:true};}},
   tabs:{get:async()=>({url}),onRemoved:{addListener(){}},onUpdated:{addListener(){}}}
 }};
 vm.createContext(context);for(const file of ['mail-core.js','mail-assist.js'])vm.runInContext(await read(file),context);
@@ -29,6 +30,9 @@ assert.equal(MailCore.candidates([good],req,new Set(['123456'])).length,0);
 // Disabled means NO mailbox connection, even when a verification page is open.
 assert.equal((await context.mailPoll(7)).status,'off');assert.equal(polls,0);
 persistent.mailAssist={enabled:true,provider:'163',email:'test@163.com'};
+const beforeSettings=nativeActions.length;
+await context.mailHandle({action:'mailSettings'},{url:'chrome-extension://test/settings.html'});
+assert.equal(nativeActions.length,beforeSettings,'Rendering settings must not start the native helper');
 persistent.applications=[{id:'A',applicationNumber:'TESTA'},{id:'B',applicationNumber:'TESTB'}];persistent.selectedApplicationId='A';
 assert.equal((await context.mailPoll(7)).status,'unbound');assert.equal(polls,0);
 assert.equal((await context.mailTrack(7,'WRONG')).ok,false);
@@ -45,6 +49,8 @@ assert.equal(polls,0,'Do not read email before the verification page');
 url='https://ircc-services.canada.ca/2/ast-otp-verification';
 events[0]({applications:{newValue:persistent.applications}},'local');await Promise.resolve();await Promise.resolve();
 const first=await context.mailPoll(7);assert.equal(first.status,'candidates');assert.equal(first.candidates.length,1);
+const foundPolls=polls;time+=11000;
+assert.equal((await context.mailPoll(7)).status,'candidates');assert.equal(polls,foundPolls,'Pause native fetching while the user reviews a candidate');
 const code=await context.mailTake(7,{requestId:first.requestId,profileId:'A',candidateId:'one'});assert.equal(code,'123456');
 url='https://ircc-services.canada.ca/2/ast-otp-verification?lang=en#verification';
 assert.equal((await context.mailPoll(7)).status,'waiting','Query parameters must not drop request binding');
@@ -61,7 +67,7 @@ persistent.selectedApplicationId='B';await assert.rejects(()=>context.mailTake(7
 persistent.selectedApplicationId='A';await context.mailTrack(7,'TESTA');time+=100;mailbox=[{...good,receivedAt:time}];const ignored=await context.mailPoll(7);
 await context.mailHandle({action:'mailIgnore',tabId:7,requestId:ignored.requestId},{url:'chrome-extension://test/popup.html'});
 time+=11000;assert.equal((await context.mailPoll(7)).status,'waiting');
-url='https://gc.auth.canada.ca/login';assert.equal((await context.mailPoll(7)).status,'unbound','Expired Tracker session stops mailbox access');
+url='https://gc.auth.canada.ca/login';const beforeLeave=polls;assert.equal((await context.mailPoll(7)).status,'unbound','Expired Tracker session stops mailbox access');assert.equal(polls,beforeLeave);
 await assert.rejects(()=>context.mailHandle({action:'mailSave',config:{enabled:false}},{tab:{id:7},url:'https://ircc-services.canada.ca/2/ast-search'}));
 url='https://ircc-services.canada.ca/2/ast-otp-verification';await context.mailTrack(7,'TESTA');time+=180001;assert.equal((await context.mailPoll(7)).status,'unbound');
 await context.mailTrack(7,'TESTA');persistent.mailAssist.enabled=false;const count=polls;assert.equal((await context.mailPoll(7)).status,'off');assert.equal(polls,count);

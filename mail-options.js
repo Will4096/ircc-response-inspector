@@ -39,7 +39,7 @@
     initializing=false;
     if(!keepDraft){$('mailEnabled').checked=!!stored.enabled;$('mailProvider').value=stored.provider || '163';$('mailEmail').value=stored.email || '';$('mailClientId').value=stored.clientId || '';$('mailPassword').value='';editingConnection=false;editingPassword=false;$('mailHelperDetails').open=$('mailEnabled').checked&&connection.helperReady!==true;}
     $('mailExtensionId').textContent=info.extensionId;$('mailRedirect').textContent=info.redirect;
-    helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';render();
+    helperKey=connection.helperReady===true?(hasSaved()?'按需启动':'本机程序可用'):connection.helperReady===false?'本机程序未连接':'尚未检查';render();
   }
   async function run(work,progress,success,rollback=false,keepDraft=false){
     if(busy)return;busy=true;notice(progress,'busy');render();

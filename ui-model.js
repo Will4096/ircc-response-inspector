@@ -3,6 +3,7 @@ var UIModel={
   query(stage,data,hasProfile){
     const state={step:1,title:'开始查询',help:'选择申请后，打开 Tracker 完成登录。',label:'待开始',open:false,fill:false,verify:false,capture:false,stop:false,add:!hasProfile,openText:'打开 Tracker'};
     if(!hasProfile)return {...state,step:0,title:'先添加一份申请资料',help:'保存 Tracker 查询需要的信息，之后可重复使用。',label:'首次使用'};
+    if(stage==='access')return {...state,title:'先关联当前 Tracker 登录页',help:'Chrome 尚未允许识别认证页地址。允许后将关联原标签页，不读取登录表单。',label:'需要页面授权',open:true,newTab:true,openText:'识别当前登录页'};
     if(stage==='expired')return {...state,title:'Tracker 登录已超时',help:'在原 Tracker 标签页重新登录，所选申请和上次结果会保留。',label:'登录超时',open:true,openText:'重新登录 Tracker'};
     if(stage==='login')return {...state,title:'在当前 Tracker 标签页完成登录',help:'继续当前登录；若已超时，点击重新登录。不会新建标签页。',label:'需要登录',open:true,relogin:true,openText:'继续登录'};
     if(data.active)return {...state,step:data.status==='filling'?2:4,title:data.status==='filling'?'正在填写申请资料':'正在验证或读取申请进度',help:'请保留 Tracker 页面，完成后会显示本次结果和变化。',label:'处理中',stop:true};

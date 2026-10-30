@@ -45,7 +45,7 @@ async function harness(saved){
 // Side-panel handoff runs in the worker and never reuses a tab in a different window.
 {
   const h=await harness(),api=h.context.chrome,updates=[],created=[];
-  api.windows={get:async id=>({id})};
+  api.permissions={contains:async()=>true};api.windows={get:async id=>({id})};
   api.tabs.get=async id=>({id,windowId:99,url:'https://ircc-services.canada.ca/2/ast-search'});
   api.tabs.query=async options=>{assert.equal(options.windowId,1);return [];};
   api.tabs.create=async options=>{created.push(options);return {id:8,...options};};
@@ -63,7 +63,7 @@ async function harness(saved){
 // Authentication recovery reuses only this window's established Tracker tab.
 {
   const h=await harness(),api=h.context.chrome,db={},updates=[],created=[];let current={id:17,windowId:1,url:'https://ircc-services.canada.ca/2/ast-search'};
-  api.windows={get:async id=>({id})};api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
+  api.permissions={contains:async()=>true};api.windows={get:async id=>({id})};api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
   api.tabs.get=async id=>{if(id!==current.id)throw Error('closed');return {...current};};
   api.tabs.query=async options=>options.windowId===current.windowId?[{...current}]:[];
   api.tabs.update=async(id,change)=>{updates.push({id,...change});current={...current,...change};return {...current};};api.tabs.create=async options=>{created.push(options);return {id:18,...options};};
@@ -79,6 +79,23 @@ async function harness(saved){
   assert.equal(created.length,0);assert.ok(!JSON.stringify(db).includes('synthetic-expired'),'No authentication URLs or parameters persisted');
   current.url='https://work.example/';
   await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(created.length,1,'Never replace a visibly unrelated page');
+}
+// Reproduce real Chrome's withheld authentication URL, without pre-seeding a tab registry.
+{
+  const h=await harness(),api=h.context.chrome,db={},updates=[],created=[];let granted=false;
+  const visible=()=>({id:17,windowId:1,active:true,...(granted?{url:'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic'}:{})});
+  api.permissions={contains:async()=>granted};api.windows={get:async id=>({id})};
+  api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
+  api.tabs.get=async()=>visible();api.tabs.query=async options=>options.active?[visible()]:granted?[visible()]:[];
+  api.tabs.create=async options=>{created.push(options);return {id:18,...options};};api.tabs.update=async(id,change)=>{updates.push({id,...change});return {...visible(),...change};};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'access');
+  assert.equal((await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17},sender)).needsAccess,true);assert.equal(created.length,0,'Unknown URL is not proof that Tracker is absent');
+  granted=true;
+  assert.equal((await h.sendExtension({action:'resolveTrackerTab',windowId:1},sender)).tabId,17);
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);
+  assert.equal(created.length,0);assert.equal(updates[0].id,17);assert.ok(!JSON.stringify(db).includes('reqId'));
 }
 // Restore replaces only backup-owned data, with rollback on write failure.
 {

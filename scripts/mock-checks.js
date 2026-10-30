@@ -97,6 +97,15 @@
     w=await load('/workspace.html?surface=panel&stage=expired');await settle();await settle();
     const expired=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
     assert(expired.getElementById('openTracker').textContent==='重新登录 Tracker'&&expired.getElementById('reloginTracker').hidden&&expired.getElementById('verifyForm').hidden,'expired session has one clear recovery action');
+    w=await load('/workspace.html?surface=panel&auth=hidden');await settle();await settle();
+    const opaqueWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow,opaque=opaqueWindow.document;let authTabs=0;const grants=[];const request=w.chrome.permissions.request;
+    w.chrome.tabs.create=async()=>{authTabs++;return {id:99};};w.chrome.permissions.request=async value=>{grants.push(value);return request(value);};
+    assert(opaque.getElementById('openTracker').textContent==='识别当前登录页','withheld URL prompts for association instead of claiming no Tracker exists');
+    await opaque.getElementById('openTracker').onclick();
+    assert(grants.length===1&&grants[0].origins.length===2&&grants[0].origins.includes('https://gc.auth.canada.ca/*')&&!opaque.getElementById('reloginTracker').hidden&&authTabs===0,'one narrow authorization reveals the existing auth page without creating a tab');
+    w=await load('/workspace.html?surface=panel&auth=hidden&denyAuth=1');await settle();await settle();
+    const denied=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;let deniedTabs=0;w.chrome.tabs.create=async()=>{deniedTabs++;return {id:99};};await denied.getElementById('openTracker').onclick();
+    assert(deniedTabs===0&&denied.getElementById('output').textContent.includes('未允许')&&denied.getElementById('openTracker').textContent==='识别当前登录页','permission denial leaves existing tabs untouched and does not fall back to creating another');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

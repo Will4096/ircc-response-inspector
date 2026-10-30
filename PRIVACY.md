@@ -1,13 +1,13 @@
 # Privacy policy / 隐私政策
 
-Updated / 更新日期: 2026-10-29
+Updated / 更新日期: 2026-10-30
 
 Maintainer / 维护者: Will4096. This is an independent extension, not affiliated with IRCC or the Government of Canada. 本扩展为独立开发的非官方工具，与 IRCC 或加拿大政府无隶属关系。
 
 ## English
 
 ### What the extension processes
-The extension helps you fill the official IRCC Tracker form and view your own application progress. You sign in yourself. If you save a profile, it processes the label, name, UCI, application number, date of birth, country of birth and Tracker role you enter. During a user-initiated check it reads application/applicant statuses, medical-exam and other milestone statuses, pending-action counts, History entries and relevant JSON responses from the selected Tracker tab. A manually entered verification code is used only to submit that verification, not saved as a preference, logged, or intentionally included in an export. Mailbox assistance is off by default. When explicitly enabled it reads matching verification messages from the selected mailbox provider. It does not handle your Tracker sign-in password.
+The extension helps you fill the official IRCC Tracker form and view your own application progress. You sign in yourself. If you save a profile, it processes the label, name, UCI, application number, date of birth, country of birth and Tracker role you enter. During a user-initiated check it reads application/applicant statuses, medical-exam and other milestone statuses, pending-action counts, History entries and relevant JSON responses from the selected Tracker tab. A manually entered verification code is used only to submit that verification, not saved as a preference, logged, or intentionally included in an export. Mailbox assistance is off by default. When explicitly enabled it reads matching verification messages from the selected mailbox provider. It does not handle your Tracker sign-in password. With optional site access, it uses URL metadata for gc.auth.canada.ca and clegc-gckey.gc.ca to associate the current window's sign-in tab. It does not inject scripts into those authentication pages, inspect sign-in forms, or store their URLs or request parameters.
 
 ### Storage and retention
 Profiles, language/autofill preferences and the latest successful comparison baseline are stored in this extension's local Chrome storage. Query caches and captured responses are stored in Chrome session storage; they are not intended to survive the browser session. Nothing is stored in Chrome Sync. Local storage is not an encrypted vault: anyone with sufficient access to your device/browser profile may access it.
@@ -16,7 +16,7 @@ Profiles, language/autofill preferences and the latest successful comparison bas
 The extension has no developer-operated backend, analytics, advertising, telemetry, or external AI service. It does not send your application data to the maintainer or third parties. When you choose to fill or verify a query, the information required for that operation is submitted to the official IRCC website through its page. IRCC and any sign-in services you use have their own privacy policies. Chrome, GitHub and other products you use operate independently of this extension.
 
 ### Optional mailbox assistance
-Optional mailbox assistance stores the provider, mailbox address and OAuth Client ID locally. Gmail uses Google read-only OAuth (which grants mailbox-wide read access); access tokens stay in worker memory and may need reauthorization after worker restart. The Windows-only 163 helper uses IMAP and stores the client app password encrypted using current-user Windows DPAPI. It contacts only imap.163.com over verified TLS. Message bodies and verification codes are processed in memory, not saved, logged or exported. Session metadata and request-salted candidate digests support request binding and duplicate suppression. The helper has no developer backend, service or listening port. Disabling assistance stops requests and clears candidates; disconnect/clear-data also clears local helper credentials when the helper is available. If it is unavailable, use its uninstaller to remove the credential file. Uninstalling the extension alone does not remove the Windows helper or its credentials. Revoke Gmail access or the 163 app password at the provider when no longer needed.
+Optional mailbox assistance stores the provider, mailbox address and OAuth Client ID locally. Gmail uses Google read-only OAuth (which grants mailbox-wide read access); access tokens stay in worker memory and may need reauthorization after worker restart. The Windows-only 163 helper uses IMAP and stores the client app password encrypted using current-user Windows DPAPI. It contacts only imap.163.com over verified TLS. Message bodies and verification codes are processed in memory, not saved, logged or exported. Session metadata and request-salted candidate digests support request binding and duplicate suppression. The helper starts for one operation and exits afterwards, with no developer backend, service or listening port. Only pending verification or an explicit setup/check starts it; rendering settings does not. Fetching pauses while a candidate awaits confirmation. A request already in progress finishes and exits after cancellation. Disabling assistance stops requests and clears candidates; disconnect/clear-data also clears local helper credentials when the helper is available. If it is unavailable, use its uninstaller to remove the credential file. Uninstalling the extension alone does not remove the Windows helper or its credentials. Revoke Gmail access or the 163 app password at the provider when no longer needed.
 
 ### Responses and exports
 Known authentication fields (for example passwords, OTP fields, authorization headers and token fields) are redacted before newly captured response JSON is stored. This does not make the remaining results anonymous: names, identifiers, dates, application and medical-exam milestone statuses and History can still be personal or sensitive information. An export is created on your device only when you choose Export. Protect it and remove personal information before sharing it. The extension does not upload exports.
@@ -30,7 +30,7 @@ Data is used only for the extension's application-tracking features, not sold, u
 ## 中文
 
 ### 处理哪些信息
-本扩展用于填写 IRCC Tracker 官方查询表单及查看你自己的申请进度。你自行完成登录。保存申请时，扩展处理你填写的申请名称、姓名、UCI、申请编号、出生日期、出生国家和查询身份。你发起查询后，扩展读取所选 Tracker 标签页的申请/申请人状态、体检等进度状态、待办数量、History 及相关 JSON 响应。手动验证码仅用于提交当前验证，不作为配置保存、不记录日志，也不主动写入导出。邮箱辅助默认关闭，仅在明确启用后从所选邮箱服务读取匹配的验证邮件；不处理 Tracker 登录密码。
+本扩展用于填写 IRCC Tracker 官方查询表单及查看你自己的申请进度。你自行完成登录。保存申请时，扩展处理你填写的申请名称、姓名、UCI、申请编号、出生日期、出生国家和查询身份。你发起查询后，扩展读取所选 Tracker 标签页的申请/申请人状态、体检等进度状态、待办数量、History 及相关 JSON 响应。手动验证码仅用于提交当前验证，不作为配置保存、不记录日志，也不主动写入导出。邮箱辅助默认关闭，仅在明确启用后从所选邮箱服务读取匹配的验证邮件；不处理 Tracker 登录密码。经可选站点授权后，扩展仅使用 gc.auth.canada.ca 和 clegc-gckey.gc.ca 的地址元数据关联当前窗口的认证标签页，不在这些认证页注入脚本、不读取登录表单、不保存认证地址或请求参数。
 
 ### 保存位置与期限
 申请资料、语言/自动填写偏好及最近一次成功查询的对比基准保存在本机 Chrome 扩展存储。查询缓存和捕获响应使用 Chrome 会话存储，不用于跨浏览器会话长期保存。不使用 Chrome Sync。本地存储不等于加密保险库，具备设备或浏览器资料访问权限的人可能访问这些数据。
@@ -39,7 +39,7 @@ Data is used only for the extension's application-tracking features, not sold, u
 扩展没有开发者服务器、统计分析、广告、遥测或外部 AI 服务，不向维护者或第三方发送申请数据。你选择填写或验证查询时，所需信息通过官方页面提交给 IRCC。IRCC 和你使用的登录服务有各自的隐私政策；Chrome、GitHub 等独立产品的数据处理不由本扩展控制。
 
 ### 可选邮箱辅助
-可选邮箱辅助在本机保存邮箱类型、邮箱地址和 OAuth Client ID。Gmail 使用 Google 只读 OAuth（授权范围为整个邮箱），访问令牌仅在后台内存中，后台重启后可能需重新授权。仅 Windows 支持的 163 本机程序通过 IMAP 读取邮件，客户端授权码使用当前 Windows 用户的 DPAPI 加密保存，仅以校验证书的 TLS 连接 imap.163.com。邮件正文和验证码仅在内存中处理，不保存、不记录日志、不导出。会话存储保存请求元数据和带随机请求标识的候选摘要，用于绑定和排重。本机程序无开发者服务器、常驻服务或监听端口。关闭功能会停止请求并清除候选；断开或清除数据还会在本机程序可用时删除其凭据。若程序不可用，请运行卸载脚本删除凭据文件。单独卸载扩展不会删除 Windows 程序及其凭据。不再使用时请在 Google 撤销授权，或在 163 撤销客户端授权码。
+可选邮箱辅助在本机保存邮箱类型、邮箱地址和 OAuth Client ID。Gmail 使用 Google 只读 OAuth（授权范围为整个邮箱），访问令牌仅在后台内存中，后台重启后可能需重新授权。仅 Windows 支持的 163 本机程序通过 IMAP 读取邮件，客户端授权码使用当前 Windows 用户的 DPAPI 加密保存，仅以校验证书的 TLS 连接 imap.163.com。邮件正文和验证码仅在内存中处理，不保存、不记录日志、不导出。会话存储保存请求元数据和带随机请求标识的候选摘要，用于绑定和排重。本机程序单次请求启动、处理完退出，无开发者服务器、常驻服务或监听端口。仅等待验证码或主动连接/检查时启动，打开设置不会启动；候选等待确认时暂停取码，取消后的在途请求完成后退出。关闭功能会停止请求并清除候选；断开或清除数据还会在本机程序可用时删除其凭据。若程序不可用，请运行卸载脚本删除凭据文件。单独卸载扩展不会删除 Windows 程序及其凭据。不再使用时请在 Google 撤销授权，或在 163 撤销客户端授权码。
 
 ### 响应与导出
 新捕获的 JSON 响应在保存前会遮盖已知认证字段，如密码、OTP、authorization 和 token 字段。其余结果并未匿名化：姓名、编号、日期、申请/体检进度及 History 仍可能包含个人敏感信息。只有你点击导出时才会生成本地文件，扩展不会上传它。分享前请自行脱敏。

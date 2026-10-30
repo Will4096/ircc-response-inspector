@@ -6,13 +6,17 @@
   const empty=query.has('empty'),mail=query.get('mail'),gmail=mail==='reauth';
   let data={uiLanguage:query.get('lang')==='en'?'en':'zh',applications:empty?[]:profiles,selectedApplicationId:empty?'':'demo-a',autoFill:true,mailAssist:mail?{enabled:true,provider:gmail?'gmail':'163',email:gmail?'example@gmail.com':'example@163.com',clientId:gmail?'demo-client.apps.googleusercontent.com':''}:{enabled:false}};
   let stage=query.get('stage') || 'results';
+  const authHidden=query.get('auth')==='hidden';let authGranted=!authHidden;
+  if(authHidden)stage='access';
   let capture={active:false,status:'completed',finishedAt:'2026-10-29T12:00:00Z',application:{number:'DEMO0001',title:'申请人 A · Application',status:'In Progress'},applicants:['申请人 A','申请人 B'].map((name,index)=>({id:'person'+index,relationId:String(index),name,role:index?'DEP':'PA',status:'completed',checks:{biometrics:'Completed',medical:'Completed',eligibility:'Completed',background:'In Progress'},historyLoaded:true,history:[{key:index?'Medical':'Security',actStatus:index?'Completed':'17',dateCreated:'2026-10-28',text:'虚构记录 · Demo record'}],pendingActions:0})),responses:[],errors:[],comparison:{status:'changed',previousAt:'2026-10-28T12:00:00Z',changes:[{person:'申请人 A',type:'history',added:1,label:'History',removed:0}],people:{person0:[{type:'history',added:1,newIndices:[0]}]}}};
   if(stage!=='results' || empty)capture={active:false,status:'idle',application:{},applicants:[],responses:[]};
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
   const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
-  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{request:async()=>true},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.8.2'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.8.3'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
+      case 'resolveTrackerTab':return {tabId:authGranted?1:undefined};
+      case 'openTrackerPage':return !authGranted&&!message.forceNew?{needsAccess:true}:{ok:true,tabId:1};
       case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
       case 'mailHelperStatus':return nativeReady?{ok:true,configured}:{error:'mail.helper'};
       case 'mailSetup163':configured=true;verifiedAt=Date.now();return {ok:true};
@@ -28,5 +32,5 @@
       case 'start':case 'verify':capture={...capture,active:true,status:'capturing'};setTimeout(()=>{capture={...capture,active:false,status:'completed'};stage='results';},900);return {ok:true};
       default:return {ok:true};
     }
-  }},tabs:{query:async()=>empty?[]:[{id:1,windowId:1,active:true,url:'https://ircc-services.canada.ca/2/ast-details'}],get:async()=>({windowId:1,url:'https://ircc-services.canada.ca/2/ast-details'}),update:async()=>{},create:async({url})=>{if(url==='options.html')location.href=url;return {id:1};}},windows:{update:async()=>{}}};
+  }},tabs:{query:async()=>empty?[]:[{id:1,windowId:1,active:true,...(!authGranted?{}:{url:authHidden?'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic':'https://ircc-services.canada.ca/2/ast-details'})}],get:async()=>({id:1,windowId:1,...(!authGranted?{}:{url:authHidden?'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic':'https://ircc-services.canada.ca/2/ast-details'})}),update:async()=>{},create:async({url})=>{if(url==='options.html')location.href=url;return {id:1};}},windows:{getCurrent:async()=>({id:1}),update:async()=>{}}};
 })();

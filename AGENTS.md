@@ -22,3 +22,6 @@
 - A trusted submit is pending until Tracker reaches verification: polling must not cancel its binding on the search page or during persistence. Use the observed submit time, protect newer requests from stale cancellation, and check the page observer version after extension updates. Submission stays on the official page; locating Submit must never click it.
 
 - Route all Tracker open/resume/relogin actions through the same current-window resolver. Preserve established tab identity across GCKey redirects, reuse that tab for restart, never persist authentication URLs/parameters, and never replace a visibly unrelated page or another window's tab.
+
+- Missing tab.url is an access/association state, not proof that Tracker is absent. Model Chrome's withheld URL and permission approval/denial in tests; request only the two optional official authentication origins on an explicit click, and never default to creating a duplicate tab on refusal.
+- The 163 helper is single-request, on demand. Settings rendering must not launch it. Pause fetching when candidates await confirmation; cancel new polling when the verification demand ends, allowing an in-flight request to finish and exit.

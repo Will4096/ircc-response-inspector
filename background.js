@@ -11,6 +11,7 @@ importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
 const trackerRelevant=url=>{try{const u=new URL(url);return u.protocol==='https:'&&['ircc-services.canada.ca','gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(u.hostname);}catch{return false;}};
+async function trackerAuthAccess(){try{return await chrome.permissions.contains({origins:TrackerAuthOrigins});}catch{return false;}}
 async function rememberTrackerTab(tab){
   if(tab?.id===undefined||tab.windowId===undefined||!trackerRelevant(tab.url))return;
   const key='tracker:window:'+tab.windowId,saved=(await chrome.storage.session.get(key))[key];
@@ -24,7 +25,9 @@ async function findTrackerTab(windowId,tabId){
   }
   const active=await chrome.tabs.query({active:true,windowId});
   if(accept(active[0])){await rememberTrackerTab(active[0]);return active[0];}
-  const tabs=await chrome.tabs.query({windowId,url:'https://ircc-services.canada.ca/*'}),found=tabs.find(accept);
+  const origins=['https://ircc-services.canada.ca/*'];
+  for(const origin of TrackerAuthOrigins)try{if(await chrome.permissions.contains({origins:[origin]}))origins.push(origin);}catch{}
+  const tabs=await chrome.tabs.query({windowId,url:origins}),found=tabs.find(accept);
   if(found)await rememberTrackerTab(found);return found;
 }
 let backupRestoring=false;
@@ -165,6 +168,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(!mailExtensionSender(sender))throw new Error('请从扩展页面操作。');
       const win=await chrome.windows.get(message.windowId);
       let target=await findTrackerTab(win.id,id);
+      if(!target&&!message.forceNew&&!await trackerAuthAccess())return {needsAccess:true};
       if(target){
         if(!message.resume){await mailCancel(target.id);await chrome.storage.session.remove('pageNotice:'+target.id);if(sessions.get(target.id)?.active)await finish(target.id,'stopped','已停止');}
         const previous=target;target={...previous,...await chrome.tabs.update(target.id,{active:true,...(message.resume?{}:{url:'https://ircc-services.canada.ca/2/ast'})})};
@@ -193,6 +197,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       let tab;try{tab=await chrome.tabs.get(id);}catch{return {stage:'closed'};}
       await rememberTrackerTab(tab);
       if(!tab.url&&tab.windowId!==undefined){const saved=(await chrome.storage.session.get('tracker:window:'+tab.windowId))['tracker:window:'+tab.windowId];if(saved?.tabId===id){if(mailRequests.has(id))await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'login',tabId:id};}}
+      if(!tab.url||(!trackerRelevant(tab.url)&&!await trackerAuthAccess()))return {stage:'access',tabId:id};
       let url;try{url=new URL(tab.url);}catch{return {stage:'closed'};}
       if(['gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(url.hostname)){
         if(mailRequests.has(id))await mailCancel(id);

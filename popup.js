@@ -68,6 +68,7 @@ function historyDetails(person,responses,changes=[]){
   return container;
 }
 function renderContext(context,data={}){
+  if(currentContext?.stage==='access'&&context?.stage!=='access'&&['未允许识别认证页，现有标签页保持不变。','未找到 Tracker 或官方登录页，请切回原页面，或选择新建 Tracker 页。'].includes(outputSource))setOutput('');
   currentContext=context || {stage:'closed'};
   const complete=data.status==='completed'&&currentContext.stage==='results';
   const state=UIModel.query(currentContext.stage,data,!!$('application').value);
@@ -75,6 +76,7 @@ function renderContext(context,data={}){
   $('stageLabel').hidden=complete;$('stageLabel').textContent=t(state.label);$('stageLabel').dataset.state=state.label==='已完成'?'connected':['等待验证码','登录超时','需要登录'].includes(state.label)?'setup':'';
   $('addFirstProfile').hidden=!state.add;$('openTracker').hidden=!state.open;$('openTracker').textContent=t(state.openText);
   $('reloginTracker').hidden=!state.relogin;
+  $('newTracker').hidden=!state.newTab;
   $('fill').hidden=!state.fill;$('fill').disabled=!!data.active || !$('application').value;
   $('verifyForm').hidden=!state.verify;$('resultActions').hidden=!state.capture;$('stopCapture').hidden=!state.stop;
   $('fill').textContent=t(currentContext.stage==='role'?'填写申请资料':'填入 Tracker');
@@ -177,18 +179,31 @@ $('fill').onclick=async()=>{
   catch(error){setOutput(error.message);}
   finally{$('fill').textContent=t('填入 Tracker');$('fill').disabled=false;lastSnapshot='';await refreshCapture().catch(error=>setOutput(error.message));}
 };
-async function requestTrackerEntry(resume=false){
-  if(entryBusy)return;entryBusy=true;$('openTracker').disabled=true;$('reloginTracker').disabled=true;
+async function requestTrackerEntry(resume=false,forceNew=false){
+  if(entryBusy)return;entryBusy=true;$('openTracker').disabled=true;$('reloginTracker').disabled=true;$('newTracker').disabled=true;
   try{
   let windowId=queryWindowId;
   if(windowId===undefined&&targetTabId!==undefined)try{windowId=(await chrome.tabs.get(targetTabId)).windowId;}catch{}
   if(windowId===undefined)windowId=(await chrome.windows.getCurrent()).id;
-  const result=await chrome.runtime.sendMessage({action:'openTrackerPage',windowId,tabId:targetTabId,resume});
-  if(result?.error)throw Error(result.error);targetTabId=result.tabId;lastSnapshot='';await refreshCapture();
-  }finally{entryBusy=false;$('openTracker').disabled=false;$('reloginTracker').disabled=false;}
+  const result=await chrome.runtime.sendMessage({action:'openTrackerPage',windowId,tabId:targetTabId,resume,forceNew});
+  if(result?.error)throw Error(result.error);
+  if(result?.needsAccess){renderContext({stage:'access'},displayedCapture||{});return;}
+  targetTabId=result.tabId;lastSnapshot='';await refreshCapture();
+  }finally{entryBusy=false;$('openTracker').disabled=false;$('reloginTracker').disabled=false;$('newTracker').disabled=false;}
 }
 async function openTracker(){await requestTrackerEntry(false);}
 $('openTracker').onclick=async()=>{try{
+  if(currentContext.stage==='access'){
+    const permission=chrome.permissions.request({origins:TrackerAuthOrigins});
+    $('openTracker').disabled=true;$('newTracker').disabled=true;
+    try{if(!await permission){setOutput('未允许识别认证页，现有标签页保持不变。');return;}
+      const windowId=queryWindowId??(await chrome.windows.getCurrent()).id;
+      const resolved=await chrome.runtime.sendMessage({action:'resolveTrackerTab',windowId});
+      if(resolved?.tabId===undefined){setOutput('未找到 Tracker 或官方登录页，请切回原页面，或选择新建 Tracker 页。');return;}
+      targetTabId=resolved.tabId;lastSnapshot='';await refreshCapture();
+    }finally{$('openTracker').disabled=false;$('newTracker').disabled=false;}
+    return;
+  }
   if(currentContext.stage==='expired'){await requestTrackerEntry(false);return;}
   if(currentContext.observerReady===false){if(currentContext.stage==='verification')await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});else await chrome.tabs.reload(targetTabId);return;}
   if(currentContext.stage==='form'&&displayedCapture?.status==='ready'){
@@ -210,6 +225,7 @@ $('openTracker').onclick=async()=>{try{
   lastSnapshot='';await refreshCapture();
 }catch(error){setOutput(error.message);}};
 $('reloginTracker').onclick=async()=>{try{await requestTrackerEntry(false);}catch(error){setOutput(error.message);}};
+$('newTracker').onclick=async()=>{try{await requestTrackerEntry(false,true);}catch(error){setOutput(error.message);}};
 $('stopCapture').onclick=async()=>{try{await send('stop');lastSnapshot='';await refreshCapture();}catch(error){setOutput(error.message);}};
 $('verifyForm').onsubmit=async event=>{
   event.preventDefault();const code=$('code').value.trim();
@@ -230,6 +246,7 @@ $('capture').onclick=async()=>{
   const [current]=await chrome.tabs.query({active:true,...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});
   if(current?.url && /^https:\/\/(ircc-services\.canada\.ca|gc\.auth\.canada\.ca|clegc-gckey\.gc\.ca)\//.test(current.url))targetTabId=current.id;
   else{const tabs=await chrome.tabs.query({url:'https://ircc-services.canada.ca/*',...(queryWindowId!==undefined?{windowId:queryWindowId}:{currentWindow:true})});const verificationTabs=tabs.filter(tab=>{try{return new URL(tab.url).pathname==='/2/ast-otp-verification';}catch{return false;}});targetTabId=(verificationTabs.length===1?verificationTabs[0]:tabs.find(tab=>tab.active) || tabs[0])?.id;}
+  if(queryWindowId!==undefined){const resolved=await chrome.runtime.sendMessage({action:'resolveTrackerTab',windowId:queryWindowId,tabId:targetTabId});if(resolved?.tabId!==undefined)targetTabId=resolved.tabId;}
   await refreshCapture();
 })().catch(error=>setOutput(error.message));
 setInterval(()=>{void (async()=>{
