@@ -3,6 +3,7 @@ import ctypes
 from ctypes import wintypes
 import datetime as dt
 import email
+from html.parser import HTMLParser
 from email import policy
 from email.utils import getaddresses
 import imaplib
@@ -75,20 +76,47 @@ def logout(client):
         pass
 
 
+class MailText(HTMLParser):
+    """Extract text only; no browser, scripts, images or external requests."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.blocked = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style', 'head', 'noscript', 'svg'):
+            self.blocked.append(tag)
+
+    def handle_endtag(self, tag):
+        if self.blocked and tag == self.blocked[-1]:
+            self.blocked.pop()
+
+    def handle_data(self, data):
+        if not self.blocked:
+            self.parts.append(data)
+
+
 def extract_message(uid, raw, received_at):
     message = email.message_from_bytes(raw, policy=policy.default)
-    texts = []
+    texts, html = [], []
     # Never render HTML, fetch remote images, or read attachments.
     for part in message.walk():
-        if part.get_content_type() != 'text/plain' or part.get_content_disposition() == 'attachment':
+        if part.get_content_type() not in ('text/plain', 'text/html') or part.get_content_disposition() == 'attachment' or part.get_filename():
             continue
         try:
-            texts.append(part.get_content()[:64000])
+            content = part.get_content()[:131072]
+            if part.get_content_type() == 'text/plain':
+                if content.strip():
+                    texts.append(content[:64000])
+            else:
+                parser = MailText()
+                parser.feed(content)
+                html.append(' '.join(parser.parts)[:64000])
         except (LookupError, UnicodeError):
             continue
     recipients = [v.lower() for _, v in getaddresses(message.get_all('To', []) + message.get_all('Delivered-To', []))]
     return {'id': str(uid), 'receivedAt': received_at, 'from': str(message.get('From', ''))[:200],
-            'to': recipients, 'subject': str(message.get('Subject', ''))[:500], 'text': '\n'.join(texts)[:64000]}
+            'to': recipients, 'subject': str(message.get('Subject', ''))[:500], 'text': '\n'.join(texts or html)[:64000]}
 
 
 def internal_time(metadata):
@@ -103,7 +131,7 @@ def internal_time(metadata):
 def handle(request):
     action = request.get('action')
     if action == 'status':
-        return {'ok': True, 'version': '1.0', 'configured': SECRET.exists()}
+        return {'ok': True, 'version': '1.1', 'configured': SECRET.exists()}
     if action == 'clear':
         SECRET.unlink(missing_ok=True)
         return {'ok': True}

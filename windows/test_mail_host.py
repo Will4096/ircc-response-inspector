@@ -36,6 +36,14 @@ class HostTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             host.handle({'action': 'send'})
 
+    def test_html_only_message_is_text_without_loading_resources(self):
+        raw = b'From: notice@cic.gc.ca\r\nTo: test@163.com\r\nSubject: Application status tracker\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<head><style>654321</style></head><p>Your verification code is <b>123456</b>.</p><img src="https://example.invalid/pixel"><script>999999</script>'
+        result = host.extract_message('html', raw, 1000)
+        self.assertIn('123456', result['text'])
+        self.assertNotIn('654321', result['text'])
+        self.assertNotIn('999999', result['text'])
+        self.assertNotIn('example.invalid', result['text'])
+
     @unittest.skipUnless(sys.platform == 'win32', 'Windows DPAPI')
     def test_dpapi_roundtrip(self):
         secret = b'synthetic-test-secret-only'
