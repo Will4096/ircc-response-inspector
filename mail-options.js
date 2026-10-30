@@ -17,7 +17,6 @@
     for(const id of ['mailEnabled','mailProvider','mailEmail','mailClientId','mailPassword','mailConnect','mailHelperStatus','mailDisconnect'])$(id).disabled=busy;
     if(!gmail&&connection.helperReady!==true)$('mailConnect').hidden=true;
     $('mailStatus').textContent=t(noticeKey);$('mailStatus').dataset.tone=noticeTone;
-    $('mailSetupGuide').href=I18n.language==='en'?'mail-help.en.html':'mail-help.html';
   }
   async function load(keepDraft=false){
     const current=++revision,info=await send({action:'mailSettings'});if(current!==revision)return;
@@ -29,7 +28,7 @@
   async function run(work,progress,success,rollback=false,keepDraft=false){
     if(busy)return;busy=true;notice(progress,'busy');render();
     try{await work();await load(keepDraft);notice(success,'success');}
-    catch(error){if(error.message==='mail.helper')connection.helperReady=false;helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
+    catch(error){if(error.message==='mail.helper'){connection.helperReady=false;document.getElementById('mailInstallHelp').open=true;}helperKey=connection.helperReady===true?'本机程序可用':connection.helperReady===false?'本机程序未连接':'尚未检查';if(rollback)try{await load();}catch{}notice(errors[error.message] || errors['mail.network'],'error');}
     finally{busy=false;render();}
   }
   function validate(value){

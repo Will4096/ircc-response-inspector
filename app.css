@@ -2,3 +2,4 @@
 
 label:has(input[required])>span:first-child:after{content:" *";color:#a64a3e}button[aria-current=true]{font-weight:650}
 pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.install-command{max-height:110px;overflow:auto;user-select:all;font-size:11px;line-height:1.5;background:#fff;border:1px solid var(--line);padding:10px;border-radius:6px;margin:12px 0}

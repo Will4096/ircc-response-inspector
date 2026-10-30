@@ -4,6 +4,14 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '查看命令':'View command',
+    '复制安装命令':'Copy installation command',
+    '点击复制安装命令。当前扩展 ID 已自动填好，无需修改。':'Copy the installation command. Your extension ID is already filled in.',
+    '在 Windows 开始菜单打开 PowerShell，粘贴命令并按回车。':'Open PowerShell from the Windows Start menu, paste the command and press Enter.',
+    '等待出现 Installation complete，再回到这里检查本机程序。':'Wait for Installation complete, then return here to check the local helper.',
+    '命令会下载并校验固定版本脚本，自动安装依赖和本机程序。不需要下载源码或管理员权限。':'The command downloads and verifies a fixed installer version, then installs dependencies and the helper. No source download or administrator rights are needed.',
+    '随后在 163 开启 IMAP 并生成客户端授权码，再填写下方信息验证连接。':'Then enable IMAP in 163, create an app password and verify the connection below.',
+    '邮箱设置':'Email settings',
     '处理中…':'Processing…',
     '加密备份':'Encrypted backup',
     '取消':'Cancel',

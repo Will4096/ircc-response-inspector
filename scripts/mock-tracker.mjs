@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 const root=new URL('../',import.meta.url);
-const assets=new Set(['scanner.js','app.css','popup.css','layout.js','popup.html','options.html','settings.html','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','profiles.js','privacy-data.js','backup-core.js','backup-ui.js','mail-help.html','mail-help.en.html','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/mock-checks.js']);
+const assets=new Set(['scanner.js','app.css','popup.css','layout.js','popup.html','options.html','settings.html','i18n.js','domain.js','ui-model.js','popup.js','options.js','settings.js','installer-ui.js','profiles.js','privacy-data.js','backup-core.js','backup-ui.js','mail-help.html','mail-help.en.html','mail-options.js','mail-popup.js','scripts/ui-fixtures.js','scripts/mock-checks.js']);
 const wrap=body=>`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Local Tracker simulator</title><style>body{font:16px/1.6 system-ui;max-width:900px;margin:30px auto;padding:20px}label{display:block;margin:12px 0}input,select,button,a{padding:8px}aside{background:#fff3cd;padding:12px}li{margin:12px 0}</style><aside>本地模拟 · 虚构数据 · 非 IRCC 网站。请勿填写真实资料。测试码：123456</aside>${body}<script src="/scanner.js"></script></html>`;
 export function createMockTracker(){return http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost'),p=url.pathname;

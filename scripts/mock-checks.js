@@ -33,7 +33,9 @@
     await $('mailHelperStatus').onclick();await settle();
     assert($('mailHelperState').textContent==='本机程序未连接'&&$('mailConnect').hidden,'helper failure has consistent state and no invalid connect button');
     assert($('mailPassword').value==='synthetic-app-password','helper failure preserves typed password');
-    assert($('mailExtensionId').textContent==='synthetic-preview'&&$('mailSetupGuide').getAttribute('href')==='mail-help.html','extension ID and readable HTML help link available');
+    assert($('mailExtensionId').textContent==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'&&$('mailInstallHelp').open&&$('mailInstallHelp').closest('.notice').querySelector('#mailHelperStatus'),'installation help expands beside helper check');
+    assert($('installerCommand').textContent.includes("-ExtensionId 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")&&$('installerCommand').textContent.includes('Get-FileHash')&&!$('installerCopy').disabled,'copy command includes extension ID and pinned integrity check');
+    assert(!$('mailSetupGuide').hasAttribute('href')&&!$('aboutHelp').hasAttribute('target'),'help navigation does not create new tabs');
     w=await load('/settings.html');await settle();
     $('mailEnabled').checked=true;$('mailEnabled').onchange();$('mailEmail').value='example@163.com';$('mailPassword').value='synthetic-app-password';
     $('mailHelperStatus').onclick();await settle();await settle();
@@ -55,7 +57,7 @@
       frame.style.width='350px';w=await load('/settings.html?mail=error&lang='+lang);await settle();
       assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,lang+' settings and backup fit narrow viewport');
     }
-    frame.style.width='850px';w=await load('/settings.html');await settle();w.document.getElementById('backup').scrollIntoView();
+    frame.style.width='850px';w=await load('/settings.html?mail=error');await settle();w.document.getElementById('mailInstallHelp').open=true;w.document.getElementById('mailInstallHelp').scrollIntoView();
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();
