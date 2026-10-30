@@ -6,6 +6,8 @@
   const settle=()=>new Promise(r=>setTimeout(r,100));
   try{
     let w=await load('/2/ast-search');assert(w.document.querySelectorAll('input').length===6,'synthetic application form');
+    let submitClicks=0;w.document.querySelector('button').onclick=()=>submitClicks++;
+    assert(!w.locateTrackerSubmit().ok&&submitClicks===0,'locator preserves its official-domain boundary on localhost');
     w=await load('/2/ast-otp-verification');w.document.querySelector('input').value='000000';w.document.querySelector('form').requestSubmit();assert(w.readVerificationState().error,'wrong code detected');
     w.document.querySelector('input').value='123456';const navigated=new Promise(r=>frame.onload=()=>r(frame.contentWindow));w.document.querySelector('form').requestSubmit();w=await navigated;assert(w.readOverview().applicants.length===2,'correct code leads to two applicants');
     w=await load('/2/ast-view-application?relation_id=2');assert(w.readApplicant().name==='Applicant B','applicant isolation');assert(w.readApplicant().checks.background==='In Progress','milestone scanner');
@@ -81,6 +83,10 @@
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=unbound');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
     const unbound=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('mailAssistStatus');
     assert(unbound.textContent.includes('本次请求尚未关联')&&!unbound.querySelector('.mail-loading')&&unbound.querySelector('button'),'unbound request gives a concrete action instead of an endless spinner');
+    assert(!w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('export'),'query results do not contain a low-frequency backup action');
+    w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&observer=missing');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
+    const stale=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    assert(stale.getElementById('openTracker').textContent==='重新加载查询表单'&&stale.getElementById('mailAssistStatus').hidden,'stale Tracker script shows refresh rather than misleading request-unbound status');
     w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();
     w.document.querySelector('iframe[data-view="settings.html"]').contentDocument.getElementById('mailPasswordLabel').scrollIntoView();
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';

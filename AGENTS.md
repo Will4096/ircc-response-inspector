@@ -18,3 +18,5 @@
 
 - Use a single persistent workspace for query, profiles and settings. Internal navigation must not create browser tabs or discard unsaved inputs. Only explicit external actions such as opening Tracker may open a website.
 - Show a persistent masked saved-state marker for stored app passwords; never read the actual secret back into the UI. Separate saved connection state from request binding, polling and candidate confirmation.
+
+- A trusted submit is pending until Tracker reaches verification: polling must not cancel its binding on the search page or during persistence. Use the observed submit time, protect newer requests from stale cancellation, and check the page observer version after extension updates. Submission stays on the official page; locating Submit must never click it.

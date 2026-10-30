@@ -1,5 +1,6 @@
 // No mailbox page access. Runs only on the official Tracker host.
 (()=>{
+  chrome.runtime.onMessage?.addListener((message,sender,reply)=>{if(message.action==='mailObserverHealth'){reply({version:chrome.runtime.getManifest().version,requestTracking:true});}});
   const send=async message=>{const r=await chrome.runtime.sendMessage(message);if(r?.error)throw new Error(r.error);return r;};
   // Capture the actual search submit, even when autofill is off. Never infer a request on popup open.
   document.addEventListener('click',event=>{

@@ -1,5 +1,6 @@
 /* Worker-only mailbox transports. Secrets and candidates stay in worker memory. */
 const mailRequests=new Map(),mailSecrets=new Map(),mailGmailTokens=new Map(),mailPollLocks=new Set();
+const mailTrackingTabs=new Map();
 const MAIL_NATIVE='com.will4096.ircc_mail';
 const MAIL_GMAIL_ORIGIN='https://gmail.googleapis.com/*';
 const MAIL_WINDOW=180000; // Observation window, NOT a claim about IRCC code validity.
@@ -12,7 +13,11 @@ async function mailNative(payload){
   catch(error){if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
 }
 async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
-async function mailCancel(tabId){mailRequests.delete(tabId);mailSecrets.delete(tabId);await mailWrite(()=>chrome.storage.session.remove('mail:request:'+tabId));}
+async function mailCancel(tabId,expected){
+  if(expected&&mailRequests.get(tabId)?.id!==expected.id)return;
+  mailRequests.delete(tabId);mailSecrets.delete(tabId);
+  await mailWrite(async()=>{const key='mail:request:'+tabId,saved=(await chrome.storage.session.get(key))[key];if(!expected||saved?.id===expected.id)await chrome.storage.session.remove(key);});
+}
 async function mailCancelAll(){
   for(const id of [...mailRequests.keys()])await mailCancel(id);mailSecrets.clear();
   await mailWrite(async()=>{const data=await chrome.storage.session.get(null);
@@ -70,32 +75,54 @@ async function mailMessages(config,request){
   }
   return messages;
 }
-async function mailContext(tabId,request){
+async function mailBinding(request){
   const config=await mailConfig(),selected=await chrome.storage.local.get(['selectedApplicationId','applications']);
-  let tab;try{tab=await chrome.tabs.get(tabId);}catch{return null;}
   if(!config.enabled || !request || request.deadline<Date.now() || selected.selectedApplicationId!==request.profileId || config.email!==request.email || config.provider!==request.provider || !selected.applications?.some(p=>p.id===request.profileId))return null;
+  const profile=selected.applications.find(p=>p.id===request.profileId);
+  if(request.applicationNumber&&normalizeApplicationNumber(profile.applicationNumber)!==request.applicationNumber)return null;
+  return config;
+}
+async function mailContext(tabId,request){
+  const config=await mailBinding(request);if(!config)return null;
+  let tab;try{tab=await chrome.tabs.get(tabId);}catch{return null;}
   if(mailPage(tab.url)!=='/2/ast-otp-verification')return null;
   return config;
 }
 let mailTrackQueue=Promise.resolve();
-function mailTrack(tabId,number){const next=mailTrackQueue.then(()=>mailTrackNow(tabId,number));mailTrackQueue=next.catch(()=>{});return next;}
-async function mailTrackNow(tabId,number){
+function mailTrack(tabId,number){
+  const observedAt=Date.now();
+  mailTrackingTabs.set(tabId,(mailTrackingTabs.get(tabId)||0)+1);
+  const next=mailTrackQueue.then(()=>mailTrackNow(tabId,number,observedAt)).finally(()=>{const count=mailTrackingTabs.get(tabId)-1;if(count)mailTrackingTabs.set(tabId,count);else mailTrackingTabs.delete(tabId);});
+  mailTrackQueue=next.catch(()=>{});return next;
+}
+async function mailTrackNow(tabId,number,observedAt){
   const config=await mailConfig();if(!config.enabled)return {ok:false};
   const {selectedApplicationId,applications=[]}=await chrome.storage.local.get(['selectedApplicationId','applications']);
   const profile=applications.find(p=>p.id===selectedApplicationId);
   if(!profile || normalizeApplicationNumber(profile.applicationNumber)!==normalizeApplicationNumber(number) || !number)return {ok:false};
   // Only one outstanding request per mailbox: no speculative cross-profile matching.
   await mailCancelAll();
-  const request={id:crypto.randomUUID(),profileId:profile.id,email:config.email,provider:config.provider,startedAt:Date.now(),deadline:Date.now()+MAIL_WINDOW};
+  const request={id:crypto.randomUUID(),profileId:profile.id,applicationNumber:normalizeApplicationNumber(number),email:config.email,provider:config.provider,startedAt:observedAt,deadline:observedAt+MAIL_WINDOW};
   mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});
   await mailWrite(async()=>{if(mailRequests.get(tabId)===request)await chrome.storage.session.set({['mail:request:'+tabId]:request});});return {ok:true};
 }
 async function mailPoll(tabId){
+  if(mailTrackingTabs.has(tabId))return {status:'requesting'};
   if(mailPollLocks.has(tabId))return {status:'waiting'};
   let request=mailRequests.get(tabId);
-  if(!request){request=(await chrome.storage.session.get('mail:request:'+tabId))['mail:request:'+tabId];if(request){mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});}}
-  const config=await mailContext(tabId,request);
-  if(!config){await mailCancel(tabId);return {status:(await mailConfig()).enabled?'unbound':'off'};}
+  if(!request){
+    const saved=(await chrome.storage.session.get('mail:request:'+tabId))['mail:request:'+tabId];
+    if(mailTrackingTabs.has(tabId))return {status:'requesting'};
+    request=mailRequests.get(tabId)||saved;
+    if(request&&!mailRequests.has(tabId)){mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});}
+  }
+  const config=await mailBinding(request);
+  if(mailTrackingTabs.has(tabId)||mailRequests.get(tabId)!==request)return {status:'requesting'};
+  if(!config){await mailCancel(tabId,request);return {status:(await mailConfig()).enabled?'unbound':'off'};}
+  let tab;try{tab=await chrome.tabs.get(tabId);}catch{await mailCancel(tabId,request);return {status:'unbound'};}
+  // A submit click precedes navigation. A stale UI poll must not erase that new binding.
+  if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
+  if(mailPage(tab.url)!=='/2/ast-otp-verification'){await mailCancel(tabId,request);return {status:'unbound'};}
   const secrets=mailSecrets.get(tabId);
   const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
@@ -110,6 +137,7 @@ async function mailPoll(tabId){
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(saved?.email===config.email && saved.lastError)await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});
   }catch(error){
+    if(mailRequests.get(tabId)!==request)return {status:'off'};
     secrets.error=['mail.auth','mail.account','mail.credentials','mail.helper','mail.permission','mail.windows','mail.network'].includes(error.message)?error.message:'mail.network';
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(mailRequests.get(tabId)===request && saved?.email===config.email && saved.lastError!==secrets.error)await chrome.storage.local.set({mailConnection:{...saved,lastError:secrets.error}});
@@ -134,7 +162,7 @@ async function mailTake(tabId,message){
 }
 async function mailHandle(message,sender){
   if(!String(message.action).startsWith('mail'))return undefined;
-  const extension=mailExtensionSender(sender),tracker=mailTrackerSender(sender),tabId=sender.tab?.id ?? message.tabId;
+  const extension=mailExtensionSender(sender),tracker=mailTrackerSender(sender),tabId=extension?message.tabId:sender.tab?.id ?? message.tabId;
   if(['mailSave','mailAuthorize','mailSetup163','mailTest163','mailDisconnect','mailSettings','mailHelperStatus'].includes(message.action)){
     if(!extension)throw new Error('mail.permission');
     if(message.action==='mailSettings'){
@@ -188,7 +216,12 @@ async function mailHandle(message,sender){
   if(message.action==='mailCancel'){await mailCancel(tabId);return {ok:true};}
   throw new Error('mail.permission');
 }
-chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local' && (changes.selectedApplicationId || changes.mailAssist || changes.applications))void mailCancelAll();});
+chrome.storage.onChanged.addListener((changes,area)=>{
+  if(area==='local'&&(changes.selectedApplicationId||changes.mailAssist||changes.applications)){
+    const observed=[...mailRequests.entries()];
+    void (async()=>{for(const [id,request] of observed)if(!await mailBinding(request)||(changes.applications&&!request.applicationNumber))await mailCancel(id,request);})();
+  }
+});
 chrome.tabs.onRemoved.addListener(id=>void mailCancel(id));
 chrome.tabs.onUpdated.addListener((id,change)=>{
   if(change.url && !['/2/ast-search','/2/ast-otp-verification'].includes(mailPage(change.url)))void mailCancel(id);

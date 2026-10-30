@@ -1,3 +1,12 @@
+function locateTrackerSubmit(){
+  if(location.origin!=='https://ircc-services.canada.ca'||location.pathname!=='/2/ast-search')return {ok:false};
+  const candidates=Array.from(document.querySelectorAll('button,input[type=submit],[role=button]')).filter(b=>b.getClientRects().length&&!b.disabled&&(b.id==='submitButton'||/^(submit|soumettre)$/i.test((b.getAttribute('aria-label')||b.textContent||b.value||'').trim())));
+  const button=document.getElementById('submitButton')|| (candidates.length===1?candidates[0]:null);
+  if(!button||!button.getClientRects().length||button.disabled)return {ok:false};
+  button.scrollIntoView({block:'center',behavior:'smooth'});button.focus({preventScroll:true});
+  const previous=button.style.outline;button.style.outline='3px solid #3671d8';setTimeout(()=>{button.style.outline=previous;},2500);
+  return {ok:true};
+}
 async function fillApplication(application, mode='fill'){
   if(location.origin!=='https://ircc-services.canada.ca' || location.pathname!=='/2/ast-search')return {ok:false,message:'页面已变化，未填写。'};
   const visible=element=>element.getClientRects().length>0;

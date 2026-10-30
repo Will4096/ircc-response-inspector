@@ -8,7 +8,7 @@ assert.equal(ui.query('closed',{},true).open,true);
 assert.equal(ui.query('login',{},true).openText,'继续登录');
 assert.equal(ui.query('form',{},true).fill,true);
 assert.equal(ui.query('form',{status:'ready'},true).fill,false);
-assert.equal(ui.query('form',{status:'ready'},true).openText,'前往核对并提交');
+assert.equal(ui.query('form',{status:'ready'},true).openText,'定位官网 Submit');
 assert.equal(ui.query('verification',{status:'failed'},true).verify,true);
 assert.equal(ui.query('results',{active:true},true).stop,true);
 assert.equal(ui.query('results',{status:'stopped'},true).capture,true);

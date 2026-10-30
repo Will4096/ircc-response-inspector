@@ -11,7 +11,7 @@
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
   const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
-  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{request:async()=>true},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.8.0'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{request:async()=>true},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.8.1'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
       case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
       case 'mailHelperStatus':return nativeReady?{ok:true,configured}:{error:'mail.helper'};
@@ -21,7 +21,7 @@
       case 'mailDisconnect':verifiedAt=null;configured=false;changes({mailAssist:{enabled:false}});return {ok:true,helperCleared:true};
       case 'clearLocalData':changes({applications:[],autoFill:false,mailAssist:{enabled:false},uiLanguage:'zh'});return {ok:true,helperCleared:true};
       case 'removeProfile':{const next=data.applications.filter(p=>p.id!==message.profileId);changes({applications:next});return {ok:true,applications:next};}
-      case 'getContext':return {stage};case 'read':return capture;
+      case 'getContext':return {stage,...(query.get('observer')==='missing'?{observerReady:false}:{})};case 'read':return capture;
       case 'mailPoll':return data.mailAssist.enabled?{status:query.get('poll')||'waiting',checkedAt:Date.now()}:{status:'off'};
       case 'stop':capture={...capture,active:false,status:'stopped'};return {ok:true};
       case 'fill':capture={...capture,status:'ready'};return {ok:true,message:'请确认申请信息，点击 Submit 后继续。'};

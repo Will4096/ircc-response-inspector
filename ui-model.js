@@ -5,7 +5,7 @@ var UIModel={
     if(!hasProfile)return {...state,step:0,title:'先添加一份申请资料',help:'保存 Tracker 查询需要的信息，之后可重复使用。',label:'首次使用'};
     if(data.active)return {...state,step:data.status==='filling'?2:4,title:data.status==='filling'?'正在填写申请资料':'正在验证或读取申请进度',help:'请保留 Tracker 页面，完成后会显示本次结果和变化。',label:'处理中',stop:true};
     if(stage==='verification')return {...state,step:3,title:data.status==='failed'?'验证未完成，请换码重试':'完成邮箱验证',help:'核对本次验证码后提交，随后继续查询。',label:'等待验证码',verify:true};
-    if(stage==='role' || stage==='form')return {...state,step:2,title:data.status==='ready'?'资料已填写，请核对后提交':'填写并核对申请资料',help:'提交操作在 Tracker 官方页面完成。',label:'等待你操作',fill:data.status!=='ready',open:data.status==='ready',openText:'前往核对并提交'};
+    if(stage==='role' || stage==='form')return {...state,step:2,title:data.status==='ready'?'资料已填写，请核对后提交':'填写并核对申请资料',help:'提交操作在 Tracker 官方页面完成。',label:'等待你操作',fill:data.status!=='ready',open:data.status==='ready',openText:stage==='form'?'定位官网 Submit':'继续核对申请'};
     if(stage==='results')return {...state,step:4,title:data.status==='failed'?'本次查询未完成':data.status==='stopped'?'查询已停止':data.status==='completed'?'查询完成':'可以查询申请进度',help:data.status==='completed'?'先看本次变化，再展开申请人详情。':'可以重新查询；未完成的结果不会更新对比基准。',label:data.status==='completed'?'已完成':'可查询',capture:true};
     return {...state,title:stage==='login'?'在 Tracker 完成登录':'开始查询',help:'登录由你在 IRCC 官方页面完成，扩展不会代为登录。',label:stage==='login'?'等待登录':'待开始',open:true,openText:stage==='login'?'继续登录':'打开 Tracker'};
   },

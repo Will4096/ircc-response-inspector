@@ -4,6 +4,15 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    'Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。':'Tracker is using an older extension script. Reload the search form, review it and click the official Submit button.',
+    '重新加载查询表单':'Reload search form',
+    '定位官网 Submit':'Locate official Submit',
+    '继续核对申请':'Continue reviewing',
+    '扩展已更新，请刷新 Tracker 页面，让本次请求识别生效。':'The extension was updated. Refresh Tracker to enable request tracking on this page.',
+    '刷新 Tracker 页面':'Refresh Tracker',
+    '请在 Tracker 官网核对资料，再点击高亮的 Submit。':'Review the form on Tracker, then click the highlighted Submit button.',
+    '未找到官网 Submit，请检查左侧表单是否完整。':'Submit could not be located. Check whether the Tracker form is ready.',
+    'Tracker 页面暂未就绪，请检查官网提示，必要时刷新。':'Tracker is not ready. Check the official page and refresh if needed.',
     '邮箱连接':'Email connection',
     '更换邮箱':'Change mailbox',
     '更换授权码':'Replace app password',

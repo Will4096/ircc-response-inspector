@@ -77,6 +77,9 @@ function renderContext(context,data={}){
   $('code').disabled=!!data.active || verificationBusy;$('verify').disabled=!!data.active || verificationBusy;$('capture').disabled=!!data.active || verificationBusy;
   $('querySteps').hidden=state.add || data.status==='completed';$('entryTitle').closest?.('.task-area')?.setAttribute('data-complete',String(data.status==='completed'));
   for(const node of document.querySelectorAll?.('#querySteps li') || []){const step=Number(node.dataset.step);node.dataset.current=String(step===state.step);node.dataset.complete=String(step<state.step || data.status==='completed');}
+  if(currentContext.pageNotice?.kind==='filled'&&/手动选择|无法|失败/.test(currentContext.pageNotice.text||''))$('entryState').textContent=msg(currentContext.pageNotice.text);
+  if(currentContext.pageNotice?.kind==='pageError')$('entryState').textContent=t('Tracker 页面暂未就绪，请检查官网提示，必要时刷新。');
+  if(currentContext.observerReady===false){$('entryState').textContent=t('Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。');$('openTracker').hidden=false;$('openTracker').textContent=t('重新加载查询表单');$('fill').hidden=true;$('verifyForm').hidden=true;}
 }
 
 function renderCapture(data){
@@ -94,7 +97,7 @@ function renderCapture(data){
   $('applicationNumber').textContent=[data.application?.number,data.application?.status].filter(Boolean).join(' · ');
   $('captureTime').textContent=data.finishedAt?t('查询时间 ')+I18n.date(data.finishedAt):'';
   $('capture').textContent=people.length || responses.length?t('刷新进度'):t('查询进度');
-  $('application').disabled=!!data.active || verificationBusy;$('export').disabled=!people.length && !responses.length;$('queryFooter').hidden=!people.length && !responses.length;
+$('application').disabled=!!data.active || verificationBusy;$('queryFooter').hidden=!people.length && !responses.length;
   renderContext(currentContext,data);
   $('resultsPanel').hidden=!people.length && !responses.length;
   const results=$('results');results.replaceChildren();
@@ -179,6 +182,10 @@ async function openTracker(){
   else{const created=await chrome.tabs.create({url:'https://ircc-services.canada.ca/2/ast'});targetTabId=created.id;}
 }
 $('openTracker').onclick=async()=>{try{
+  if(currentContext.observerReady===false){if(currentContext.stage==='verification')await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});else await chrome.tabs.reload(targetTabId);return;}
+  if(currentContext.stage==='form'&&displayedCapture?.status==='ready'){
+    const result=await send('locateSubmit');setOutput(result?.ok?'请在 Tracker 官网核对资料，再点击高亮的 Submit。':'未找到官网 Submit，请检查左侧表单是否完整。');return;
+  }
   if(!isSidePanel&&chrome.sidePanel?.open&&queryWindowId!==undefined){
     // Both calls start inside the click gesture; the worker owns navigation if the popup closes.
     const navigation=chrome.runtime.sendMessage({action:'openTrackerPage',windowId:queryWindowId,tabId:targetTabId,resume:!!targetTabId&&['login','form','role'].includes(currentContext.stage)});
@@ -206,11 +213,6 @@ $('capture').onclick=async()=>{
   $('capture').disabled=true;setOutput('');
   try{await send('start');}catch(error){setOutput(error.message);}
   finally{lastSnapshot='';await refreshCapture().catch(error=>setOutput(error.message));}
-};
-$('export').onclick=async()=>{
-  try{
-    navigateApp('settings.html#backup');
-  }catch(error){setOutput(error.message);}
 };
 (async()=>{
   await I18n.init();

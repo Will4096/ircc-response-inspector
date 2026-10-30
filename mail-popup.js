@@ -5,6 +5,7 @@
   document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
   const labels={
+    requesting:['已记录提交，等待 Tracker 验证页面','Submission recorded · waiting for Tracker','Tracker 正在处理本次提交，进入验证码页后再检查邮箱。','Tracker is processing this submission. Email checking starts on the verification page.'],
     unbound:['邮箱辅助已开启 · 本次请求尚未关联','Email assistance on · query not linked','邮箱连接已配置，但尚未捕获本次查询提交，或本次等待已结束。请重新提交 Tracker 查询表单；也可直接粘贴本次验证码。','Your mailbox is configured, but this query submission was not observed or waiting has ended. Submit the Tracker form again, or paste the code manually.'],
     waiting:['正在等待验证邮件','Waiting for verification email','仍可直接粘贴验证码，无需等待自动获取。','You can paste the code now without waiting for assistance.'],
     'mail.auth':['Gmail 需要重新授权','Gmail authorization needed','前往设置重新连接，或继续手动输入。','Reconnect in settings, or enter the code manually.'],
@@ -15,7 +16,7 @@
   function node(tag,text,parent=box){const e=document.createElement(tag);if(text)e.textContent=text;parent.append(e);return e;}
   async function tick(){
     if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
-    if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';return;}
+    if(currentContext.stage!=='verification' || currentContext.observerReady===false || displayedCapture?.active){box.hidden=true;signature='';return;}
     busy=true;
     try{
       if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
@@ -25,7 +26,7 @@
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
       if(data.status!=='candidates'){
         const text=labels[data.status] || labels['mail.network'];
-        const heading=node('strong',text[I18n.language==='en'?1:0]);if(data.status==='waiting')heading.className='mail-loading';node('p',text[I18n.language==='en'?3:2]);
+        const heading=node('strong',text[I18n.language==='en'?1:0]);if(['waiting','requesting'].includes(data.status))heading.className='mail-loading';node('p',text[I18n.language==='en'?3:2]);
         if(data.status==='waiting'&&data.checkedAt)node('small',say('上次检查：','Last checked: ')+I18n.date(data.checkedAt));
         if(data.status==='unbound'){const restart=node('button',say('返回 Tracker 重新提交','Return to Tracker form'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
         if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}

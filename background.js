@@ -115,7 +115,7 @@ function findFields(value, path = '$', found = []) {
 }
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
-    const id = sender.tab?.id ?? message.tabId;
+    const id = mailExtensionSender(sender)?message.tabId:sender.tab?.id ?? message.tabId;
     if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm'].includes(message.action))throw Error('backup.busy');
     if(message.action==='restoreBackup'){
       if(!mailExtensionSender(sender))throw Error('backup.permission');
@@ -126,7 +126,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
         const nextLocal={applications:data.applications,selectedApplicationId:data.selectedApplicationId,uiLanguage:data.uiLanguage,autoFill:data.autoFill},nextSession={};
         for(const key of Object.keys(local))if(key.startsWith('comparison:profile:'))nextLocal[key]=null;
-        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:'))nextSession[key]=null;
+        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:')||key.startsWith('pageNotice:'))nextSession[key]=null;
         for(const [id,value] of Object.entries(data.comparisons))nextLocal['comparison:profile:'+id]=value;
         for(const [id,value] of Object.entries(data.captures))nextSession['capture:profile:'+id]=value;
         await mailCancelAll();
@@ -174,7 +174,25 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       let tab;try{tab=await chrome.tabs.get(id);}catch{return {stage:'closed'};}
       let url;try{url=new URL(tab.url);}catch{return {stage:'closed'};}
       const stages={'/2/ast':'role','/2/ast-search':'form','/2/ast-otp-verification':'verification','/2/ast-details':'results','/2/ast-view-application':'results','/2/ast-history':'results'};
-      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id};
+      let observerReady;
+      if(tab.status!=='loading'&&allowed(tab.url)&&['/2/ast-search','/2/ast-otp-verification'].includes(url.pathname)){
+        try{const health=await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'});observerReady=health?.requestTracking===true&&health.version===chrome.runtime.getManifest().version;}catch{observerReady=false;}
+      }
+      const notice=(await chrome.storage.session.get('pageNotice:'+id))['pageNotice:'+id],selection=await chrome.storage.local.get('selectedApplicationId');
+      const pageNotice=notice?.path===url.pathname&&notice.profileId===selection.selectedApplicationId&&Date.now()-notice.createdAt<300000?notice:null;
+      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id,...(observerReady===undefined?{}:{observerReady}),...(pageNotice?{pageNotice}: {})};
+    }
+    if(message.action==='trackerPageNotice'){
+      if(!mailTrackerSender(sender))throw Error('请从扩展页面操作。');
+      const {selectedApplicationId}=await chrome.storage.local.get('selectedApplicationId');
+      const kind=['filled','refreshRequired','pageError'].includes(message.kind)?message.kind:'pageError';
+      await chrome.storage.session.set({['pageNotice:'+id]:{kind,text:kind==='filled'?String(message.text||'').slice(0,500):'',profileId:selectedApplicationId||'',path:new URL(sender.url).pathname,createdAt:Date.now()}});return {ok:true};
+    }
+    if(message.action==='locateSubmit'){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const tab=await chrome.tabs.get(id);if(!allowed(tab.url)||new URL(tab.url).pathname!=='/2/ast-search')return {ok:false};
+      await chrome.tabs.update(id,{active:true});
+      const result=await chrome.scripting.executeScript({target:{tabId:id},func:locateTrackerSubmit});return result[0]?.result||{ok:false};
     }
     if(message.action==='captureContext'){
       const state=sessions.get(id);
@@ -369,7 +387,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message.action === 'clear') { await finish(id,'idle','结果已清空');sessions.delete(id);await chrome.storage.session.remove('capture:'+id);return {ok:true}; }
     throw new Error('Unknown action');
   })().then(reply, async error => {
-    const id=sender.tab?.id ?? message.tabId;
+    const id=mailExtensionSender(sender)?message.tabId:sender.tab?.id ?? message.tabId;
     if(['fill','verify','start'].includes(message.action) && sessions.get(id)?.active)await finish(id,'failed',error.message);
     reply({error:error.message});
   });

@@ -7,33 +7,9 @@
   let formWaitStarted=0;
   let historySignature='';
   let historyClicks=0;
-  let lastNotice=null;
-  function notify(message, title='操作提示', withSubmit=false, refresh=false){
-    lastNotice=[message,title,withSubmit,refresh];
-    let banner=document.getElementById('ircc-inspector-status');
-    if(!banner){banner=document.createElement('div');banner.id='ircc-inspector-status';banner.setAttribute('role','status');banner.setAttribute('aria-live','polite');Object.assign(banner.style,{position:'fixed',top:'18px',right:'18px',width:'360px',maxWidth:'calc(100vw - 36px)',boxSizing:'border-box',padding:'22px',background:'#fff',color:'#163047',border:'3px solid #166b49',boxShadow:'0 8px 32px #0004',zIndex:'2147483647',borderRadius:'12px',font:'16px/1.6 system-ui'});document.body.append(banner);}
-    banner.replaceChildren();
-    const heading=document.createElement('strong');heading.textContent=I18n.message(title);heading.style.cssText='display:block;font-size:22px;line-height:1.4;margin-bottom:10px';
-    const body=document.createElement('p');body.textContent=I18n.message(message);body.style.margin='0 0 12px';banner.append(heading,body);
-    if(refresh){
-      const button=document.createElement('button');button.type='button';button.textContent=I18n.t('刷新页面');button.style.cssText='background:#166b49;color:white;border:0;border-radius:6px;padding:10px 16px;cursor:pointer';button.onclick=()=>location.reload();banner.append(button);
-    }
-    if(withSubmit){
-      const button=document.createElement('button');button.type='button';button.textContent='Submit';button.style.cssText='background:#166b49;color:white;border:0;border-radius:6px;padding:12px 16px;font:600 16px system-ui;cursor:pointer';
-      button.onclick=async()=>{
-        if(button.disabled)return;
-        const submit=document.getElementById('submitButton');
-        if(location.pathname!=='/2/ast-search' || !submit){banner.remove();return;}
-        if(submit.disabled)return;
-        button.disabled=true;
-        try{await chrome.runtime.sendMessage({action:'mailTrackRequest',applicationNumber:document.getElementById('applicationNumber')?.value || ''});}catch{}
-        submit.click();
-        setTimeout(()=>{if(location.pathname==='/2/ast-search')button.disabled=false;},1500);
-      };
-      banner.append(button);
-
-    }
-    if(!withSubmit){const close=document.createElement('button');close.type='button';close.textContent=I18n.t('收起提示');close.style.cssText='display:block;margin-top:12px;background:none;border:0;text-decoration:underline;color:#52616c;cursor:pointer';close.onclick=()=>banner.remove();banner.append(close);}
+  function notify(message,title='操作提示',withSubmit=false,refresh=false){
+    document.getElementById('ircc-inspector-status')?.remove();
+    void chrome.runtime.sendMessage({action:'trackerPageNotice',kind:refresh?'refreshRequired':withSubmit?'filled':'pageError',text:withSubmit?message:''}).catch(()=>{});
   }
   function handleError(error){
     if(stopped)return;
@@ -138,7 +114,6 @@
       }
     }catch(error){handleError(error);}finally{busy=false;}
   }
-  I18n.onChange(()=>{if(lastNotice && document.getElementById('ircc-inspector-status'))notify(...lastNotice);});
   void I18n.init().catch(()=>{});
   timer=setInterval(tick,1000);
   chrome.storage.onChanged.addListener((changes,area)=>{
