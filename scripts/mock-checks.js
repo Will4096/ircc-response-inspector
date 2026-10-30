@@ -125,6 +125,9 @@
     countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
     countdownDoc.getElementById('submitSearchNow').click();countdownDoc.getElementById('submitSearchNow').click();await new Promise(r=>setTimeout(r,500));
     assert(w.__autoSubmitCount===1&&!countdownDoc.getElementById('verifyForm').hidden,'Submit now skips countdown and suppresses double clicks');
+    w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
+    const candidate=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('mailAssistStatus');
+    assert(candidate.querySelector('code')?.textContent==='123456'&&candidate.textContent.includes('通用模板')&&candidate.querySelector('button.primary')&&!candidate.querySelector('button.primary').disabled,'shared IRCC confirmation template displays a candidate for explicit review');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

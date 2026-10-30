@@ -20,6 +20,9 @@ assert.throws(()=>MailCore.normalizeConfig({enabled:true,provider:'163',email:'a
 const req={startedAt:time-1000,email:'test@163.com'};
 const good={id:'one',receivedAt:time,from:'IRCC <notice@cic.gc.ca>',to:['test@163.com'],subject:'Application status tracker verification code',text:'Your verification code is 123456.'};
 assert.equal(MailCore.candidates([good],req).length,1);
+const sharedMail={...good,from:'IRCC <do-not-reply-ircc-cxp-ne-pas-repondre-ircc-pxc@notification.canada.ca>',subject:'IRCC Portal – New version account – Confirm your account / Compte portail d’ IRCC – nouvelle version – Confirmez votre compte',text:'Your verification code is 123456.'};
+assert.equal(MailCore.candidates([sharedMail],req)[0].purpose,'TrackerAccountConfirmation');
+for(const change of [{from:'other@notification.canada.ca'},{subject:'IRCC Portal account creation'},{to:['other@163.com']},{receivedAt:time-2000},{text:'Your verification code is 123456. Reference 654321.'},{text:'Create an account. Your verification code is 123456.'}])assert.equal(MailCore.candidates([{...sharedMail,...change}],req).length,0);
 // Real IMAP INTERNALDATE drops milliseconds; a same-second arrival is not clearly old.
 const imapRequest={...req,provider:'163',startedAt:Math.floor(time/1000)*1000+750};
 const sameSecond={...good,receivedAt:Math.floor(time/1000)*1000};
@@ -62,7 +65,7 @@ const tracking=context.mailTrack(7,'TESTA');
 assert.equal((await context.mailPoll(7)).status,'requesting','Do not poll/cancel while submit binding is being written');
 await tracking;context.chrome.storage.session.get=originalGet;
 assert.equal(stored['mail:request:7'].startedAt,observedAt,'Storage delay must not move the observed submit time forward');
-time+=100;mailbox=[{...good,receivedAt:observedAt+100}];
+time+=100;mailbox=[{...sharedMail,receivedAt:observedAt+100}];
 url='https://ircc-services.canada.ca/2/ast-search';
 assert.equal((await context.mailPoll(7)).status,'requesting','Poll during submit/navigation must preserve the new request');
 assert.equal(polls,0,'Do not read email before the verification page');

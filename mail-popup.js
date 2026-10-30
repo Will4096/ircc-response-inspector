@@ -50,7 +50,7 @@
         const row=node('div');row.className='mail-candidate';
         if(data.candidates.length>1){const label=node('label',undefined,row),radio=document.createElement('input');radio.type='radio';radio.name='mailCandidate';radio.style.marginRight='8px';radio.onchange=()=>{chosen=c;confirm.disabled=false;};label.append(radio);node('code',c.code,label);}
         else node('code',c.code,row);
-        node('small',say('用途：Tracker 查询验证','Purpose: Tracker verification'),row);
+        node('small',c.purpose==='TrackerAccountConfirmation'?say('邮件类型：IRCC 账号确认（Tracker 使用的通用模板）','Message type: IRCC account confirmation (shared Tracker template)'):say('用途：Tracker 查询验证','Purpose: Tracker verification'),row);
         node('small',say('收信时间：','Received: ')+I18n.date(c.receivedAt),row);
       }
       node('p',say('请确认目标申请和邮件用途，再提交验证码。','Confirm the target profile and message purpose before submitting.'));

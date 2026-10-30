@@ -20,14 +20,18 @@ var MailCore=(()=>{
       if(!senderAllowed(mail.from)){skip('sender');continue;}
       if(!Number.isFinite(date) || date<earliest || date>now+60000){skip('time');continue;}
       if(!Array.isArray(mail.to) || !mail.to.some(to=>address(to)===address(request.email))){skip('recipient');continue;}
+      // Tracker also uses this shared template. Require its exact sender and title.
+      const sender=String(mail.from||'').trim();
+      const senderAddress=sender.includes('<')?sender.match(/^[^<>]*<([^<>]+)>$/)?.[1]:sender;
+      const sharedTemplate=/^do-not-reply-ircc-cxp-ne-pas-repondre-ircc-pxc@notification\.canada\.ca$/i.test(senderAddress||'')&&/^IRCC Portal\s*[-–—]\s*New version account\s*[-–—]\s*Confirm your account(?:\s*\/|\s*$)/i.test(String(mail.subject||'').trim());
       // Positive Tracker context AND a verification purpose; IRCC + six digits is insufficient.
-      if(!/(?:application\s+status\s+tracker|IRCC\s+tracker|suivi\s+(?:de\s+)?(?:l[’']état|des demandes))/i.test(text)){skip('purpose');continue;}
+      if(!sharedTemplate&&!/(?:application\s+status\s+tracker|IRCC\s+tracker|suivi\s+(?:de\s+)?(?:l[’']état|des demandes))/i.test(text)){skip('purpose');continue;}
       if(!/(?:verification|one[ -]time|security|confirmation)\s*(?:code|password)|code\s+de\s+v[ée]rification/i.test(text)){skip('purpose');continue;}
       if(/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|permanent\s+residen(?:ce|t)\s+portal|account\s+creation/i.test(text)){skip('purpose');continue;}
       const digits=[...new Set(text.match(/(?<!\d)\d{6}(?!\d)/g) || [])];
       if(digits.length!==1){skip('digits');continue;}
       if(excluded.has(digits[0])){skip('excluded');continue;}
-      found.push({id:String(mail.id),code:digits[0],receivedAt:date,purpose:'Tracker',sender:String(mail.from).slice(0,200)});
+      found.push({id:String(mail.id),code:digits[0],receivedAt:date,purpose:sharedTemplate?'TrackerAccountConfirmation':'Tracker',sender:String(mail.from).slice(0,200)});
     }
     return {candidates:found.filter((item,index)=>found.findIndex(other=>other.code===item.code)===index),diagnostic:{checked:(messages||[]).length,rejected}};
   }
