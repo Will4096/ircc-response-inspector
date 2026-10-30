@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';import vm from 'node:vm';import assert from 'node:assert/strict';
+const app={id:'demo',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-09',country:'China',noGivenName:false};
+let clicks=0,valid=true,autoFlag;
+const fields=Object.fromEntries(Object.entries({surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',dateOfBirthYear:'1990',dateOfBirthDay:'9'}).map(([k,value])=>[k,{value}]));
+fields.dateOfBirthMonth={selectedOptions:[{textContent:'January'}]};fields.countryOfBirth={selectedOptions:[{textContent:'China'}]};fields['noGivenNameCheckbox-1']={checked:false};
+const c={location:{origin:'https://ircc-services.canada.ca',pathname:'/2/ast-search'},document:{documentElement:{dataset:{}},getElementById:id=>fields[id],querySelectorAll:selector=>selector==='[aria-invalid="true"]'?[]:[button]}};
+const button={id:'submitButton',disabled:false,textContent:'Submit',getAttribute:()=>null,getClientRects:()=>[{}],closest:()=>({checkValidity:()=>valid}),click(){clicks++;autoFlag=c.document.documentElement.dataset.irccSearchAuto;}};
+vm.createContext(c);vm.runInContext(await fs.readFile(new URL('form.js',import.meta.url),'utf8'),c);
+assert.equal(c.submitTrackerSearch(app,false).ok,true);assert.equal(clicks,0);
+fields.surname.value='Different';assert.equal(c.submitTrackerSearch(app,true).ok,false);assert.equal(clicks,0);fields.surname.value='Example';
+fields.countryOfBirth.selectedOptions[0].textContent='Select country';assert.equal(c.submitTrackerSearch(app,true).ok,false);fields.countryOfBirth.selectedOptions[0].textContent='China';
+valid=false;assert.equal(c.submitTrackerSearch(app,true).ok,false);valid=true;
+assert.equal(c.submitTrackerSearch(app,true).ok,true);assert.equal(clicks,1);assert.equal(autoFlag,'1');assert.equal(c.document.documentElement.dataset.irccSearchAuto,undefined);
+assert.equal(c.submitTrackerSearch(app,true).alreadySubmitted,true);assert.equal(clicks,1);
+c.location.origin='https://gc.auth.canada.ca';assert.equal(c.submitTrackerSearch({...app,id:'other'},true).ok,false);assert.equal(clicks,1);
+console.log('PASS: automatic search submit validates profile, dropdowns, required fields and official route; clicks once and suppresses duplicate tracking.');

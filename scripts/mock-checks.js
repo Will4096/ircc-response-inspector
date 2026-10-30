@@ -106,6 +106,20 @@
     w=await load('/workspace.html?surface=panel&auth=hidden&denyAuth=1');await settle();await settle();
     const denied=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;let deniedTabs=0;w.chrome.tabs.create=async()=>{deniedTabs++;return {id:99};};await denied.getElementById('openTracker').onclick();
     assert(deniedTabs===0&&denied.getElementById('output').textContent.includes('未允许')&&denied.getElementById('openTracker').textContent==='识别当前登录页','permission denial leaves existing tabs untouched and does not fall back to creating another');
+    w=await load('/workspace.html?surface=panel&countdown=1');await settle();await settle();await settle();
+    let countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    assert(!countdownDoc.getElementById('autoSubmitNotice').hidden&&countdownDoc.getElementById('autoSubmitText').textContent.includes('秒'),'visible query displays the cancelable countdown');
+    countdownDoc.getElementById('cancelAutoSubmit').click();await settle();await settle();
+    assert(w.__autoSubmitCount===0&&countdownDoc.getElementById('autoSubmitNotice').hidden&&countdownDoc.getElementById('openTracker').textContent==='定位官网 Submit','cancel returns to manual official Submit without clicking it');
+    w=await load('/workspace.html?surface=panel&countdown=1');await settle();await settle();
+    w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();
+    w.document.querySelector('[data-view="popup.html"]').click();await settle();await settle();
+    countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    assert(w.__autoSubmitCount===0&&countdownDoc.getElementById('autoSubmitNotice').hidden,'switching out of query cancels automatic submission');
+    w=await load('/workspace.html?surface=panel&countdown=1');await settle();await settle();
+    assert(w.__autoSubmitCount===0,'no automatic submission at countdown start');await new Promise(r=>setTimeout(r,5400));
+    countdownDoc=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    assert(w.__autoSubmitCount===1&&!countdownDoc.getElementById('verifyForm').hidden,'countdown submits once then advances to manual or assisted email verification');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

@@ -3,7 +3,7 @@
 - Treat Query, Manage applications and Settings as one product with shared navigation, typography, spacing, controls and status language. Do not solve structural problems by appending isolated controls or CSS overrides.
 - Establish the user task, information hierarchy and complete state transitions before changing UI. Each stage has one clear primary action; advanced diagnostics and developer setup stay out of the normal path.
 - Keep application profiles in Manage applications; general preferences, optional mailbox connections, privacy/data controls and About belong in the independent Settings page. Header navigation must work across all three pages.
-- Mail assistance is opt-in and off by default. A checked setup switch is not a verified connection. Distinguish disabled, setup required, connected, authorization expired and unavailable states. Retain manual code entry. Submission requires explicit confirmation.
+- Mail assistance is opt-in and off by default. A checked setup switch is not a verified connection. Distinguish disabled, setup required, connected, authorization expired and unavailable states. Retain manual code entry. OTP submission requires explicit confirmation.
 - Preserve query completion, per-person History, Security raw codes, comparisons and profile isolation. Never interpret missing Security records as absence of security screening.
 - Default Chinese, complete English support, retain official field terms where useful. Language changes must preserve unsaved input. Show specific action feedback, not a generic Done message.
 - Handle empty, loading, success, failure, cancellation, disabled, expired and unsaved-edit states. Destructive actions are visually separated and describe their effect.
@@ -19,7 +19,7 @@
 - Use a single persistent workspace for query, profiles and settings. Internal navigation must not create browser tabs or discard unsaved inputs. Only explicit external actions such as opening Tracker may open a website.
 - Show a persistent masked saved-state marker for stored app passwords; never read the actual secret back into the UI. Separate saved connection state from request binding, polling and candidate confirmation.
 
-- A trusted submit is pending until Tracker reaches verification: polling must not cancel its binding on the search page or during persistence. Use the observed submit time, protect newer requests from stale cancellation, and check the page observer version after extension updates. Submission stays on the official page; locating Submit must never click it.
+- A trusted submit is pending until Tracker reaches verification: polling must not cancel its binding on the search page or during persistence. Use the observed submit time, protect newer requests from stale cancellation, and check the page observer version after extension updates. Search form submission follows a visible, cancellable five-second countdown after validated autofill. Cancel, hidden query view, profile changes, invalid fields or navigation stop automatic submission; never repeat an attempted click. OTP confirmation remains explicit. The manual Submit locator only focuses and never clicks.
 
 - Route all Tracker open/resume/relogin actions through the same current-window resolver. Preserve established tab identity across GCKey redirects, reuse that tab for restart, never persist authentication URLs/parameters, and never replace a visibly unrelated page or another window's tab.
 

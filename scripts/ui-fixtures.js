@@ -8,13 +8,19 @@
   let stage=query.get('stage') || 'results';
   const authHidden=query.get('auth')==='hidden';let authGranted=!authHidden;
   if(authHidden)stage='access';
+  const countdown=query.has('countdown');let autoPending=countdown?{id:'synthetic-countdown',profileId:'demo-a',phase:'awaiting',deadline:null,createdAt:Date.now()}:null;
+  window.__autoSubmitCount=0;if(countdown)stage='form';
   let capture={active:false,status:'completed',finishedAt:'2026-10-29T12:00:00Z',application:{number:'DEMO0001',title:'申请人 A · Application',status:'In Progress'},applicants:['申请人 A','申请人 B'].map((name,index)=>({id:'person'+index,relationId:String(index),name,role:index?'DEP':'PA',status:'completed',checks:{biometrics:'Completed',medical:'Completed',eligibility:'Completed',background:'In Progress'},historyLoaded:true,history:[{key:index?'Medical':'Security',actStatus:index?'Completed':'17',dateCreated:'2026-10-28',text:'虚构记录 · Demo record'}],pendingActions:0})),responses:[],errors:[],comparison:{status:'changed',previousAt:'2026-10-28T12:00:00Z',changes:[{person:'申请人 A',type:'history',added:1,label:'History',removed:0}],people:{person0:[{type:'history',added:1,newIndices:[0]}]}}};
   if(stage!=='results' || empty)capture={active:false,status:'idle',application:{},applicants:[],responses:[]};
+  if(countdown)capture.status='countdown';
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
   const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
-  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.8.3'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'3.9.0'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
+      case 'armSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId)return {cancelled:true};if(autoPending.phase==='awaiting'){autoPending={...autoPending,phase:'armed',viewId:message.viewId,deadline:Date.now()+5000};}return {pending:{...autoPending}};
+      case 'cancelSearchSubmit':autoPending=null;capture.status='ready';return {cancelled:true};
+      case 'commitSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId||autoPending.viewId!==message.viewId)return {cancelled:true};if(Date.now()<autoPending.deadline)return {pending:{...autoPending}};window.__autoSubmitCount++;autoPending=null;stage='verification';capture.status='submitted';return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
       case 'resolveTrackerTab':return {tabId:authGranted?1:undefined};
       case 'openTrackerPage':return !authGranted&&!message.forceNew?{needsAccess:true}:{ok:true,tabId:1};
       case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
@@ -25,7 +31,7 @@
       case 'mailDisconnect':verifiedAt=null;configured=false;changes({mailAssist:{enabled:false}});return {ok:true,helperCleared:true};
       case 'clearLocalData':changes({applications:[],autoFill:false,mailAssist:{enabled:false},uiLanguage:'zh'});return {ok:true,helperCleared:true};
       case 'removeProfile':{const next=data.applications.filter(p=>p.id!==message.profileId);changes({applications:next});return {ok:true,applications:next};}
-      case 'getContext':return {stage,...(query.get('observer')==='missing'?{observerReady:false}:{})};case 'read':return capture;
+      case 'getContext':return {stage,...(query.get('observer')==='missing'?{observerReady:false}:{}),...(autoPending?{autoSubmit:{...autoPending}}:{})};case 'read':return capture;
       case 'mailPoll':return data.mailAssist.enabled?{status:query.get('poll')||'waiting',checkedAt:Date.now()}:{status:'off'};
       case 'stop':capture={...capture,active:false,status:'stopped'};return {ok:true};
       case 'fill':capture={...capture,status:'ready'};return {ok:true,message:'请确认申请信息，点击 Submit 后继续。'};

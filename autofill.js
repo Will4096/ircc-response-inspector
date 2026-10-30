@@ -20,8 +20,7 @@
     }else notify(message);
   }
   function showFilled(message){
-    const incomplete=/手动选择|无法|失败/.test(message);
-    notify(incomplete?message:'请确认申请信息，点击 Submit 后继续。',incomplete?'补全申请信息':'确认申请信息',true);
+    notify(message||'请确认申请信息，点击 Submit 后继续。','填写状态',true);
   }
   chrome.runtime.onMessage.addListener(message=>{if(message.action==='showFilled')showFilled(message.message);});
   async function tick(){

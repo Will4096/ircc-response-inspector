@@ -8,6 +8,8 @@ assert.equal(ui.query('closed',{},true).open,true);
 assert.equal(ui.query('login',{},true).openText,'继续登录');
 assert.equal(ui.query('login',{active:true},true).relogin,true);
 assert.equal(ui.query('expired',{status:'completed'},true).openText,'重新登录 Tracker');
+assert.equal(ui.query('form',{status:'countdown',autoSubmit:{phase:'armed'}},true).fill,false);
+assert.equal(ui.query('form',{status:'submitted'},true).openText,'查看官网提示');
 assert.equal(ui.query('form',{},true).fill,true);
 assert.equal(ui.query('form',{status:'ready'},true).fill,false);
 assert.equal(ui.query('form',{status:'ready'},true).openText,'定位官网 Submit');

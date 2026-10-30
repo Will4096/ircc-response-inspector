@@ -14,6 +14,7 @@
   document.addEventListener('submit',event=>{if(event.isTrusted && location.pathname==='/2/ast-search')track();},true);
   let trackedAt=0;
   function track(){
+    if(document.documentElement?.dataset?.irccSearchAuto==='1')return;
     if(Date.now()-trackedAt<1000)return;trackedAt=Date.now();
     const field=document.getElementById('applicationNumber');
     if(field?.value)void send({action:'mailTrackRequest',applicationNumber:field.value.trim()}).catch(()=>{});

@@ -82,5 +82,24 @@ async function fillApplication(application, mode='fill'){
       else {combo.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));combo.blur();manual.push(wanted);}
     }
   }
-  return {ok:true,message:manual.length?`请手动选择：${manual.join('、')}。确认申请信息后点击 Submit 继续。`:'请确认申请信息，点击 Submit 后继续。'};
+  return {ok:true,manualRequired:manual.length>0,message:manual.length?`请手动选择：${manual.join('、')}。确认申请信息后点击 Submit 继续。`:'请确认申请信息，点击 Submit 后继续。'};
+}
+function submitTrackerSearch(application,submit=false){
+  if(location.origin!=='https://ircc-services.canada.ca'||location.pathname!=='/2/ast-search')return {ok:false,message:'页面已变化，自动提交已取消。'};
+  const norm=value=>String(value??'').trim().replace(/\s+/g,' ').toLowerCase();
+  const values={surname:application.surname,uci:application.uci,applicationNumber:application.applicationNumber,dateOfBirthYear:application.birthDate?.slice(0,4),dateOfBirthDay:String(Number(application.birthDate?.slice(8,10)))};
+  if(!application.noGivenName)values.givenName=application.givenName;
+  if(!application.id||Object.entries(values).some(([id,value])=>!norm(value)||norm(document.getElementById(id)?.value)!==norm(value)))return {ok:false,message:'表单资料未完整匹配当前申请，请检查后手动提交。'};
+  const noGiven=document.getElementById('noGivenNameCheckbox-1');if((application.noGivenName&&!noGiven)||(noGiven&&noGiven.checked!==!!application.noGivenName))return {ok:false,message:'表单资料未完整匹配当前申请，请检查后手动提交。'};
+  const selected=id=>{const el=document.getElementById(id);if(!el)return '';if(el.selectedOptions?.length)return norm(el.selectedOptions[0].textContent);const target=el.value!==undefined?el:el.querySelector?.('input,[role="combobox"],button');return norm(target?.value||target?.getAttribute?.('aria-valuetext')||target?.textContent);};
+  const month=Number(application.birthDate?.slice(5,7)),monthName=['January','February','March','April','May','June','July','August','September','October','November','December'][month-1];
+  if(![norm(monthName),String(month),String(month).padStart(2,'0')].includes(selected('dateOfBirthMonth'))||selected('countryOfBirth')!==norm(application.country))return {ok:false,message:'月份或出生国家未选择完整，请检查后手动提交。'};
+  const buttons=Array.from(document.querySelectorAll('button,input[type=submit],[role=button]')).filter(b=>b.getClientRects().length&&!b.disabled&&(b.id==='submitButton'||/^(submit|soumettre)$/i.test((b.getAttribute('aria-label')||b.textContent||b.value||'').trim())));
+  if(buttons.length!==1)return {ok:false,message:'官网提交按钮尚未就绪，请检查后手动提交。'};
+  const button=buttons[0],form=button.closest('form');
+  if((form&&!form.checkValidity())||Array.from(document.querySelectorAll('[aria-invalid="true"]')).some(el=>el.getClientRects().length))return {ok:false,message:'官网表单校验未通过，请检查必填项后手动提交。'};
+  const marker=document.documentElement.dataset;if(marker.irccSearchSubmitted===application.id)return {ok:false,alreadySubmitted:true,message:'本次查询已提交，不会自动重复提交。'};
+  if(!submit)return {ok:true};
+  marker.irccSearchSubmitted=application.id;marker.irccSearchAuto='1';
+  try{button.click();return {ok:true};}finally{delete marker.irccSearchAuto;}
 }

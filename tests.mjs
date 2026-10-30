@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
 const root=new URL('./',import.meta.url);
 const read=name=>fs.readFile(new URL(name,root),'utf8');
 const names=['privacy-data.js','i18n.js','comparison.js','domain.js','model.js','profiles.js','scanner.js','form.js','background.js','autofill.js','popup.js','options.js'];
@@ -29,7 +30,7 @@ const legacy={schemaVersion:2,active:true,status:'failed',reason:'读取超时',
 const recovered=domain.analyzeStoredCapture(legacy);assert.equal(recovered.status,'completed');assert.equal(recovered.active,false);assert.equal(recovered.applicants[2].history[0].key,'Security');assert.equal(recovered.analysis.total,68);
 async function harness(saved){
   let handler,network;let url='https://ircc-services.canada.ca/2/ast-details';let detached=0;let reloads=0;const moves=[];const timers=[];const stored=saved?{'capture:7':saved}:{};const bodies=new Map();
-  const context={URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,getManifest:()=>manifest,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
+  const context={crypto:webcrypto,URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,getManifest:()=>manifest,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
   vm.createContext(context);for(const name of ['domain.js','form.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','backup-core.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
   return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
     bodies.set(key,json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:'https://ircc-services.canada.ca/api'}});
@@ -121,6 +122,37 @@ async function harness(saved){
   assert.equal((await h.send('getContext')).observerReady,true,'Current submit observer acknowledges its version');
   h.context.chrome.tabs.get=async id=>{assert.equal(id,7);return {url:'https://ircc-services.canada.ca/2/ast-search'};};
   assert.equal((await h.sendExtension({action:'getContext',tabId:7},{tab:{id:99},url:'chrome-extension://test/popup.html'})).stage,'form','Extension views address the Tracker tab, not their own container tab');
+}
+// Five-second submission is armed by a visible view and cannot repeat or survive cancellation.
+{
+  async function autoHarness(manualRequired=false){
+    const h=await harness(),api=h.context.chrome;let now=100000,selected='auto-profile',clicks=0;
+    const application={id:'auto-profile',label:'Demo',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-09',country:'China',role:'principalApplicantId',noGivenName:false};
+    h.context.Date=class extends Date{static now(){return now;}};h.url='https://ircc-services.canada.ca/2/ast-search';
+    api.storage.local.get=async()=>({applications:[application],selectedApplicationId:selected});
+    api.tabs.sendMessage=async()=>({requestTracking:true,version:manifest.version});
+    api.scripting={executeScript:async request=>{let result;
+      if(request.func.name==='fillApplication')result=request.args[1]==='prepare'?{ok:true,fields:[]}:{ok:true,manualRequired,message:manualRequired?'请手动选择月份。':'资料已填写'};
+      else if(request.func.name==='submitTrackerSearch'){if(request.args[1]){clicks++;h.url='https://ircc-services.canada.ca/2/ast-otp-verification';}result={ok:true};}
+      else if(request.func.name==='readTrackerSessionState')result={expired:false};
+      return [{result}];}};
+    const sender={url:'chrome-extension://test/popup.html'};
+    await h.sendExtension({action:'fill',tabId:7,applicationId:application.id},sender);
+    const pending=(await h.sendExtension({action:'getContext',tabId:7},sender)).autoSubmit;
+    return {h,pending,clicks:()=>clicks,advance:ms=>now+=ms,switchProfile:()=>selected='another',send:(action,extra={})=>h.sendExtension({action,tabId:7,submissionId:pending?.id,viewId:'view-one',...extra},sender)};
+  }
+  let a=await autoHarness();assert.equal(a.clicks(),0);assert.equal(a.pending.phase,'awaiting');
+  let armed=await a.send('armSearchSubmit');assert.equal(armed.pending.deadline,105000);
+  a.advance(4999);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'No submission before five seconds');
+  a.advance(1);assert.equal((await a.send('commitSearchSubmit')).submitted,true);assert.equal(a.clicks(),1);
+  await a.send('commitSearchSubmit');assert.equal(a.clicks(),1,'Duplicate commits cannot repeat submission');
+  a=await autoHarness();await a.send('armSearchSubmit');await a.send('cancelSearchSubmit');a.advance(6000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.switchProfile();a.advance(5000);assert.equal((await a.send('commitSearchSubmit')).cancelled,true);assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.h.url='https://gc.auth.canada.ca/login';a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.advance(5000);await a.send('commitSearchSubmit',{viewId:'reopened-view'});assert.equal(a.clicks(),0,'Reopening a view cannot submit an old elapsed countdown');
+  a=await autoHarness();await a.send('armSearchSubmit');await a.h.send('mailTrackRequest',{applicationNumber:'DEMO0001'});a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'Manual Submit cancels the queued automatic click');
+  a=await autoHarness(true);assert.equal(a.pending,undefined);assert.equal(a.clicks(),0,'Incomplete dropdowns do not start auto-submit');
+  console.log('PASS: five-second minimum, visible-view ownership, cancellation, profile/page changes, manual submission and duplicate suppression.');
 }
 // All four records in one response: no detail/history traversal, no waiting for an unrelated request.
 let app=await harness();assert.equal((await app.send('start')).ok,true);assert.equal(app.reloads,1);await app.hang();await app.respond(wrapped);await app.send('overview',{application:{number:'TEST'},applicants:roster});

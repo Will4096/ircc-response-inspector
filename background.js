@@ -10,6 +10,22 @@ importScripts('mail-core.js');
 importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
+const searchSubmissions=new Map(),fillLocks=new Set();
+const searchSubmitMeta=p=>({id:p.id,profileId:p.application.id,phase:p.phase,deadline:p.deadline,createdAt:p.createdAt,viewId:p.viewId});
+async function writeSearchSubmit(p){await mailWrite(async()=>{if(searchSubmissions.get(p.tabId)===p)await chrome.storage.session.set({['autoSubmit:'+p.tabId]:searchSubmitMeta(p)});});}
+async function cancelSearchSubmit(id,expected){
+  const p=searchSubmissions.get(id);if(!p||(expected&&p.id!==expected))return {cancelled:false};
+  searchSubmissions.delete(id);clearTimeout(p.timeout);
+  await mailWrite(()=>chrome.storage.session.remove('autoSubmit:'+id));
+  if(sessions.get(id)===p.state&&['countdown','submitting'].includes(p.state.status))await finish(id,'ready','自动提交已取消，请手动点击官网 Submit。');
+  return {cancelled:true};
+}
+async function scheduleSearchSubmit(id,application){
+  await cancelSearchSubmit(id);
+  const p={id:crypto.randomUUID(),tabId:id,application,createdAt:Date.now(),deadline:null,phase:'awaiting',state:sessions.get(id)};
+  searchSubmissions.set(id,p);p.state.status='countdown';await publish(id,p.state);await writeSearchSubmit(p);
+  p.timeout=setTimeout(()=>void cancelSearchSubmit(id,p.id),8000);return searchSubmitMeta(p);
+}
 const trackerRelevant=url=>{try{const u=new URL(url);return u.protocol==='https:'&&['ircc-services.canada.ca','gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(u.hostname);}catch{return false;}};
 async function trackerAuthAccess(){try{return await chrome.permissions.contains({origins:TrackerAuthOrigins});}catch{return false;}}
 async function rememberTrackerTab(tab){
@@ -136,17 +152,52 @@ function findFields(value, path = '$', found = []) {
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
     const id = mailExtensionSender(sender)?message.tabId:sender.tab?.id ?? message.tabId;
+    if(['armSearchSubmit','commitSearchSubmit','cancelSearchSubmit'].includes(message.action)){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const p=searchSubmissions.get(id);if(!p||p.id!==message.submissionId)return {cancelled:true};
+      if(message.action==='cancelSearchSubmit')return p.phase==='committing'?{cancelled:false}:cancelSearchSubmit(id,p.id);
+      if(message.action==='armSearchSubmit'){
+        if(typeof message.viewId!=='string'||message.viewId.length>100)throw Error('自动提交未开始，请手动提交。');
+        if(p.phase==='awaiting'){p.viewId=message.viewId;p.phase='armed';p.deadline=Date.now()+5000;clearTimeout(p.timeout);p.timeout=setTimeout(()=>void cancelSearchSubmit(id,p.id),15000);await writeSearchSubmit(p);}
+        return {pending:searchSubmitMeta(p)};
+      }
+      if(p.viewId!==message.viewId){await cancelSearchSubmit(id,p.id);return {cancelled:true};}
+      if(p.phase!=='armed'||Date.now()<p.deadline)return {pending:searchSubmitMeta(p)};
+      p.phase='committing';clearTimeout(p.timeout);await writeSearchSubmit(p);
+      let request;
+      try{
+        const selected=await chrome.storage.local.get(['applications','selectedApplicationId']),tab=await chrome.tabs.get(id);
+        const profile=selected.applications?.find(a=>a.id===p.application.id);
+        if(selected.selectedApplicationId!==p.application.id||JSON.stringify(profile)!==JSON.stringify(p.application)||!allowed(tab.url)||new URL(tab.url).pathname!=='/2/ast-search'||tab.active===false||searchSubmissions.get(id)!==p)throw Error('页面或申请已变化，自动提交已取消。');
+        const ready=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[profile,false]});
+        if(!ready[0]?.result?.ok)throw Error(ready[0]?.result?.message||'表单尚未就绪，请手动提交。');
+        await mailTrack(id,profile.applicationNumber);request=mailRequests.get(id);
+        const current=await chrome.storage.local.get('selectedApplicationId');
+        if(current.selectedApplicationId!==profile.id||searchSubmissions.get(id)!==p)throw Error('页面或申请已变化，自动提交已取消。');
+        await finish(id,'submitting','正在提交查询…');
+        p.clickAttempted=true;
+        const clicked=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[profile,true]});
+        if(!clicked[0]?.result?.ok){p.clickAttempted=false;throw Error(clicked[0]?.result?.message||'表单尚未就绪，请手动提交。');}
+        searchSubmissions.delete(id);await chrome.storage.session.remove('autoSubmit:'+id);
+        await finish(id,'submitted','查询已提交，正在等待验证码页面。');return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
+      }catch(error){
+        if(p.clickAttempted){try{const tab=await chrome.tabs.get(id);if(allowed(tab.pendingUrl||tab.url)&&new URL(tab.pendingUrl||tab.url).pathname==='/2/ast-otp-verification'){searchSubmissions.delete(id);await chrome.storage.session.remove('autoSubmit:'+id);await finish(id,'submitted','查询已提交，正在等待验证码页面。');return {submitted:true,message:'查询已提交，正在等待验证码页面。'};}}catch{}}
+        if(request&&!p.clickAttempted)await mailCancel(id,request);await cancelSearchSubmit(id,p.id);
+        return {cancelled:true,message:/[\u3400-\u9fff]/.test(error.message)?error.message:'自动提交结果尚未确认，请查看官网提示，不会自动重复提交。'};
+      }
+    }
     if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm'].includes(message.action))throw Error('backup.busy');
     if(message.action==='restoreBackup'){
       if(!mailExtensionSender(sender))throw Error('backup.permission');
       const data=Backup.clean(message.data);
-      if([...sessions.values()].some(s=>s.active)||verificationLocks.size)throw Error('backup.busy');
+      if([...sessions.values()].some(s=>s.active)||verificationLocks.size||[...searchSubmissions.values()].some(p=>p.phase==='committing'))throw Error('backup.busy');
       backupRestoring=true;
       try{
+        for(const [tabId,p] of [...searchSubmissions])await cancelSearchSubmit(tabId,p.id);
         const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
         const nextLocal={applications:data.applications,selectedApplicationId:data.selectedApplicationId,uiLanguage:data.uiLanguage,autoFill:data.autoFill},nextSession={};
         for(const key of Object.keys(local))if(key.startsWith('comparison:profile:'))nextLocal[key]=null;
-        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:')||key.startsWith('pageNotice:'))nextSession[key]=null;
+        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:')||key.startsWith('pageNotice:')||key.startsWith('autoSubmit:'))nextSession[key]=null;
         for(const [id,value] of Object.entries(data.comparisons))nextLocal['comparison:profile:'+id]=value;
         for(const [id,value] of Object.entries(data.captures))nextSession['capture:profile:'+id]=value;
         await mailCancelAll();
@@ -179,10 +230,13 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if(message.action==='mailConfirm'){
       if(!mailExtensionSender(sender) && !mailTrackerSender(sender))throw new Error('mail.permission');
       message={...message,action:'verify',code:await mailTake(id,message)};
+    }else if(message.action==='mailTrackRequest'&&mailTrackerSender(sender)&&new URL(sender.url).pathname==='/2/ast-search'){
+      const cancellation=cancelSearchSubmit(id),tracking=mailHandle(message,sender);await cancellation;return tracking;
     }else if(String(message.action).startsWith('mail'))return mailHandle(message,sender);
     if(message.action==='clearLocalData' || message.action==='removeProfile'){
       if(sender.tab && !String(sender.url || '').startsWith(chrome.runtime.getURL('')))throw new Error('请从扩展设置操作。');
       if(message.action==='clearLocalData'){
+        for(const [tabId,p] of [...searchSubmissions])await cancelSearchSubmit(tabId,p.id);
         for(const [tabId,state] of sessions)if(state.active)await finish(tabId,'stopped','已停止');
         const helperCleared=await mailForget();sessions.clear();await chrome.storage.local.clear();await chrome.storage.session.clear();return {ok:true,helperCleared};
       }
@@ -209,14 +263,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(allowed(tab.url)&&tab.status!=='loading'&&chrome.scripting?.executeScript){
         try{const result=await chrome.scripting.executeScript({target:{tabId:id},func:readTrackerSessionState});expired=result[0]?.result?.expired===true;}catch{}
       }
-      if(expired){await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'expired',tabId:id};}
+      if(expired){await cancelSearchSubmit(id);await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'expired',tabId:id};}
       let observerReady;
       if(tab.status!=='loading'&&allowed(tab.url)&&['/2/ast-search','/2/ast-otp-verification'].includes(url.pathname)){
         try{const health=await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'});observerReady=health?.requestTracking===true&&health.version===chrome.runtime.getManifest().version;}catch{observerReady=false;}
       }
       const notice=(await chrome.storage.session.get('pageNotice:'+id))['pageNotice:'+id],selection=await chrome.storage.local.get('selectedApplicationId');
       const pageNotice=notice?.path===url.pathname&&notice.profileId===selection.selectedApplicationId&&Date.now()-notice.createdAt<300000?notice:null;
-      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id,...(observerReady===undefined?{}:{observerReady}),...(pageNotice?{pageNotice}: {})};
+      const pending=searchSubmissions.get(id);
+      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id,...(observerReady===undefined?{}:{observerReady}),...(pageNotice?{pageNotice}: {}),...(pending?{autoSubmit:searchSubmitMeta(pending)}:{})};
     }
     if(message.action==='trackerPageNotice'){
       if(!mailTrackerSender(sender))throw Error('请从扩展页面操作。');
@@ -296,12 +351,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       await advanceCapture(id,state);return {ok:true};
     }
     if(message.action==='fill'){
+      if(fillLocks.has(id)||searchSubmissions.has(id))return {ok:true,message:'正在填写或等待自动提交。'};
+      fillLocks.add(id);try{
       const tab=await chrome.tabs.get(id);
       const {applications=[]}=await chrome.storage.local.get('applications');
       const application=applications.find(item=>item.id===message.applicationId);
       if(!application)throw new Error('请先添加并选择申请资料。');
       const selection=await chrome.storage.local.get('selectedApplicationId');
-      if(selection.selectedApplicationId!==application.id)await chrome.storage.local.set({selectedApplicationId:application.id});
+      if(selection.selectedApplicationId!==application.id)throw Error('所选申请已变化，请重新填写。');
       if(!allowed(tab.url))throw new Error('请先打开 Tracker。');
       if(new URL(tab.url).pathname==='/2/ast'){
         await chrome.storage.session.set({['fillIntent:'+id]:application.id});
@@ -333,9 +390,17 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const result=results[0]?.result;
       if(!result?.ok)throw new Error(result?.message || '填写失败。');
       await chrome.storage.session.remove('fillIntent:'+id);
-      await finish(id,'ready','请确认申请信息，点击 Submit 后继续。');
+      let canSubmit=false;
+      if(!result.manualRequired){
+        let ready;
+        for(let attempt=0;attempt<5;attempt++){ready=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[application,false]});if(ready[0]?.result?.ok||ready[0]?.result?.alreadySubmitted)break;if(attempt<4)await new Promise(resolve=>setTimeout(resolve,100));}
+        canSubmit=ready[0]?.result?.ok===true;if(!canSubmit)result.message=ready[0]?.result?.message||'表单尚未就绪，请手动提交。';
+      }
+      await finish(id,'ready',result.message);
+      if(canSubmit){await scheduleSearchSubmit(id,application);return {...result,message:'资料已填写，倒计时后自动提交。'};}
       try{await chrome.tabs.sendMessage(id,{action:'showFilled',message:result.message});}catch{}
       return result;
+      }finally{fillLocks.delete(id);}
     }
     if (message.action === 'verify' || message.action === 'start') {
       if(message.action==='verify' && !message.candidateId)await mailCancel(id);
@@ -392,6 +457,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       } finally {verificationLocks.delete(id);}
     }
     if (message.action === 'stop') {
+      await cancelSearchSubmit(id);
       await mailCancel(id);
       if(sessions.get(id)?.active)await finish(id,'stopped','已停止');
       return {ok:true};
@@ -514,3 +580,6 @@ chrome.tabs.onUpdated?.addListener((id,change)=>{
 // Remember only Tracker pages we can identify; keep the same tab identity through authentication redirects.
 chrome.tabs.onUpdated?.addListener((id,change,tab)=>{if(change.url&&allowed(change.url)&&tab?.windowId!==undefined)void rememberTrackerTab({...tab,id,url:change.url}).catch(()=>{});});
 chrome.tabs.onRemoved.addListener((id,info)=>{if(info?.windowId!==undefined)void(async()=>{const key='tracker:window:'+info.windowId,saved=(await chrome.storage.session.get(key))[key];if(saved?.tabId===id)await chrome.storage.session.remove(key);})().catch(()=>{});});
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&(changes.selectedApplicationId||changes.applications||(changes.autoFill&&changes.autoFill.newValue===false)))for(const [id,p] of [...searchSubmissions])void cancelSearchSubmit(id,p.id).catch(()=>{});});
+chrome.tabs.onUpdated?.addListener((id,change)=>{if(change.url){try{if(!allowed(change.url)||new URL(change.url).pathname!=='/2/ast-search')void cancelSearchSubmit(id).catch(()=>{});}catch{}}});
+chrome.tabs.onRemoved.addListener(id=>void cancelSearchSubmit(id).catch(()=>{}));

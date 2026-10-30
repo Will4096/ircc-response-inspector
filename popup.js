@@ -8,6 +8,8 @@ let targetTabId;
 let queryWindowId;
 let entryBusy=false;
 const inWorkspace=typeof location!=='undefined'&&new URLSearchParams(location.search).get('embedded')==='1';
+let workspaceVisible=!inWorkspace,workspaceVisibilityKnown=!inWorkspace,countdownBusy=false;
+const searchViewId=globalThis.crypto?.randomUUID?.()||'view-'+Date.now()+'-'+Math.random();
 const isSidePanel=typeof location!=='undefined'&&new URLSearchParams(location.search).get('surface')==='panel';
 let lastSnapshot='';
 let verificationBusy=false;
@@ -71,7 +73,7 @@ function renderContext(context,data={}){
   if(currentContext?.stage==='access'&&context?.stage!=='access'&&['未允许识别认证页，现有标签页保持不变。','未找到 Tracker 或官方登录页，请切回原页面，或选择新建 Tracker 页。'].includes(outputSource))setOutput('');
   currentContext=context || {stage:'closed'};
   const complete=data.status==='completed'&&currentContext.stage==='results';
-  const state=UIModel.query(currentContext.stage,data,!!$('application').value);
+  const state=UIModel.query(currentContext.stage,{...data,...(currentContext.autoSubmit?{autoSubmit:currentContext.autoSubmit}:{})},!!$('application').value);
   $('entryTitle').textContent=t(state.title);$('entryState').textContent=t(state.help);
   $('stageLabel').hidden=complete;$('stageLabel').textContent=t(state.label);$('stageLabel').dataset.state=state.label==='已完成'?'connected':['等待验证码','登录超时','需要登录'].includes(state.label)?'setup':'';
   $('addFirstProfile').hidden=!state.add;$('openTracker').hidden=!state.open;$('openTracker').textContent=t(state.openText);
@@ -79,11 +81,13 @@ function renderContext(context,data={}){
   $('newTracker').hidden=!state.newTab;
   $('fill').hidden=!state.fill;$('fill').disabled=!!data.active || !$('application').value;
   $('verifyForm').hidden=!state.verify;$('resultActions').hidden=!state.capture;$('stopCapture').hidden=!state.stop;
+  $('autoSubmitNotice').hidden=!currentContext.autoSubmit;
+  if(currentContext.autoSubmit)paintSearchCountdown(currentContext.autoSubmit);
   $('fill').textContent=t(currentContext.stage==='role'?'填写申请资料':'填入 Tracker');
   $('code').disabled=!!data.active || verificationBusy;$('verify').disabled=!!data.active || verificationBusy;$('capture').disabled=!!data.active || verificationBusy;
   $('querySteps').hidden=state.add || complete;$('entryTitle').closest?.('.task-area')?.setAttribute('data-complete',String(complete));
   for(const node of document.querySelectorAll?.('#querySteps li') || []){const step=Number(node.dataset.step);node.dataset.current=String(step===state.step);node.dataset.complete=String(step<state.step || complete);}
-  if(currentContext.pageNotice?.kind==='filled'&&/手动选择|无法|失败/.test(currentContext.pageNotice.text||''))$('entryState').textContent=msg(currentContext.pageNotice.text);
+  if(!currentContext.autoSubmit&&currentContext.pageNotice?.kind==='filled'&&/手动|未完整|未就绪|未选择|校验|取消|已变化|无法|失败/.test(currentContext.pageNotice.text||''))$('entryState').textContent=msg(currentContext.pageNotice.text);
   if(currentContext.pageNotice?.kind==='pageError')$('entryState').textContent=t('Tracker 页面暂未就绪，请检查官网提示，必要时刷新。');
   if(currentContext.observerReady===false){$('entryState').textContent=t('Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。');$('openTracker').hidden=false;$('openTracker').textContent=t('重新加载查询表单');$('fill').hidden=true;$('verifyForm').hidden=true;}
 }
@@ -152,6 +156,41 @@ async function refreshCapture(){
   if(signature!==lastSnapshot){renderCapture(data);lastSnapshot=signature;}
 }
 $('version').textContent='v'+chrome.runtime.getManifest().version;
+function paintSearchCountdown(p){
+  const seconds=p.deadline?Math.max(0,Math.ceil((p.deadline-Date.now())/1000)):5;
+  $('autoSubmitText').textContent=t(p.phase==='committing'?'正在提交查询…':'将在 {seconds} 秒后自动提交').replace('{seconds}',seconds);
+  $('cancelAutoSubmit').disabled=p.phase==='committing';
+}
+async function cancelCountdown(){
+  const p=currentContext.autoSubmit;if(!p)return;delete currentContext.autoSubmit;$('autoSubmitNotice').hidden=true;
+  const result=await send('cancelSearchSubmit',{submissionId:p.id});
+  setOutput(result?.cancelled?'自动提交已取消，请手动点击官网 Submit。':'已开始提交，请等待官网响应。');
+  lastSnapshot='';await refreshCapture();
+}
+$('cancelAutoSubmit').onclick=()=>void cancelCountdown().catch(error=>setOutput(error.message));
+async function tickSearchCountdown(){
+  const p=currentContext.autoSubmit;if(!p||countdownBusy)return;
+  if(!workspaceVisibilityKnown)return;
+  if(!workspaceVisible||document.visibilityState==='hidden'||currentContext.observerReady===false||p.profileId!==$('application').value){await cancelCountdown();return;}
+  if(p.viewId&&p.viewId!==searchViewId){await cancelCountdown();return;}
+  paintSearchCountdown(p);countdownBusy=true;
+  try{
+    if(p.phase==='awaiting'){
+      const result=await send('armSearchSubmit',{submissionId:p.id,viewId:searchViewId});
+      if(currentContext.autoSubmit?.id===p.id&&result?.pending){currentContext.autoSubmit=result.pending;paintSearchCountdown(result.pending);}
+    }else if(p.phase==='armed'&&p.deadline<=Date.now()){
+      p.phase='committing';paintSearchCountdown(p);
+      const result=await send('commitSearchSubmit',{submissionId:p.id,viewId:searchViewId});
+      if(result?.pending)currentContext.autoSubmit=result.pending;else delete currentContext.autoSubmit;
+      if(result?.message)setOutput(result.message);lastSnapshot='';await refreshCapture();
+    }
+  }finally{countdownBusy=false;}
+}
+setInterval(()=>void tickSearchCountdown().catch(error=>setOutput(error.message)),200);
+if(typeof window!=='undefined'){
+  window.addEventListener('message',event=>{if(inWorkspace&&event.source===window.parent&&event.origin===location.origin&&event.data?.type==='ircc-workspace-visibility'){workspaceVisibilityKnown=true;workspaceVisible=!!event.data.visible;if(!workspaceVisible&&currentContext.autoSubmit)void cancelCountdown().catch(()=>{});}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&currentContext.autoSubmit)void cancelCountdown().catch(()=>{});});
+}
 $('openSettings').onclick=()=>navigateApp('settings.html');
 $('configure').onclick=()=>navigateApp('options.html');
 async function loadApplications(){
