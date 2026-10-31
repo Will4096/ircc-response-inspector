@@ -31,7 +31,7 @@ try {
     Write-Output '[1/3] Preparing Python and installing the local helper. Please wait...'
     & (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -File (Join-Path $staging 'install.ps1') -ExtensionId $ExtensionId -InstallPython
     if ($LASTEXITCODE -ne 0) { throw 'Installation failed. Keep the error above and retry. No mailbox credentials are needed for installation.' }
-    $homePath = Join-Path $env:LOCALAPPDATA 'IRCCMailHelper'
+    $homePath = Join-Path $env:USERPROFILE '.ircc-mail-helper'
     Copy-Item -LiteralPath (Join-Path $staging 'uninstall.ps1') -Destination (Join-Path $homePath 'uninstall.ps1') -Force
     Write-Output '[2/3] Checking the extension binding...'
     $manifest = Get-Content -LiteralPath (Join-Path $homePath 'com.will4096.ircc_mail.json') -Raw | ConvertFrom-Json

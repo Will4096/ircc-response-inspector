@@ -28,7 +28,7 @@ powershell.exe -NoProfile -File .\windows\install.ps1 -ExtensionId <扩展ID> -I
 
 如果电脑没有 Python，`-InstallPython` 使用官方 winget 包安装当前用户的 Python 3.13；已有 Python 则复用。安装操作由用户明确运行，不修改系统执行策略、不需要管理员权限。若组织策略禁止脚本，应按组织要求处理，不绕过策略。
 
-安装到 `%LOCALAPPDATA%\IRCCMailHelper`，只注册 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.will4096.ircc_mail`，只允许指定扩展 ID 调用。无常驻服务、计划任务或本地网络端口。扩展 ID 改变后需重新运行安装。
+安装到 `%USERPROFILE%\.ircc-mail-helper`，只注册 `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.will4096.ircc_mail`，只允许指定扩展 ID 调用。无常驻服务、计划任务或本地网络端口。扩展 ID 改变后需重新运行安装。
 
 在 163 设置中开启 IMAP，生成客户端授权码。回扩展设置填写授权码（不是网页登录密码），点击“连接 163 并开启”。首次连接验证成功后由 Windows DPAPI 按当前用户加密保存。只读选中 INBOX，使用 BODY.PEEK，不标记已读、不删除或发送邮件。
 

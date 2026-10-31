@@ -24,7 +24,7 @@ powershell.exe -NoProfile -File .\windows\install.ps1 -ExtensionId <extension-id
 
 The script automatically installs and registers the per-user helper. It reuses Python 3.13/3.14 or installs Python 3.13 from the official winget package if necessary. No administrator rights, services, scheduled tasks or listening ports. It does not change execution policy. Follow applicable organizational policy if scripts are blocked.
 
-Files: `%LOCALAPPDATA%\IRCCMailHelper`. Registration: `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.will4096.ircc_mail`. Only the specified extension ID may call it. Reinstall registration if the extension ID changes.
+Files: `%USERPROFILE%\.ircc-mail-helper`. Registration: `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.will4096.ircc_mail`. Only the specified extension ID may call it. Reinstall registration if the extension ID changes.
 
 Enable IMAP in 163 and generate a client app password. Enter it in extension options (not the web sign-in password), then click Connect 163 and enable. After a successful connection, the helper encrypts the app password with current-user Windows DPAPI. It uses verified TLS, read-only INBOX selection and BODY.PEEK; it does not send/delete mail or mark it as read.
 
