@@ -17,6 +17,45 @@ spec.loader.exec_module(host)
 
 
 class HostTests(unittest.TestCase):
+    def test_imap_date_keeps_previous_calendar_day_at_utc_midnight(self):
+        import datetime as dt
+        submitted = dt.datetime(2026, 10, 31, 0, 31, tzinfo=dt.timezone.utc).timestamp() * 1000
+        self.assertEqual(host.search_date(submitted), '30-Oct-2026')
+        # The same delivery can be dated Oct 30 in UTC-7 despite being Oct 31 UTC.
+        raw = b'1 (INTERNALDATE "30-Oct-2026 17:31:01 -0700" RFC822.SIZE 100)'
+        self.assertGreater(host.internal_time(raw), submitted)
+
+    def test_poll_falls_back_to_bounded_headers_and_keeps_exact_filters(self):
+        from unittest.mock import Mock
+        import datetime as dt
+        now = dt.datetime.now(dt.timezone.utc)
+        since = now.timestamp() * 1000 - 2000
+        calls = []
+        sender = 'notice@notification.canada.ca'
+        raw = f'From: {sender}\r\nTo: example@163.com\r\nSubject: IRCC Tracker verification code\r\n\r\nYour verification code is 123456.'.encode()
+        def uid(command, *args):
+            calls.append((command, args))
+            if command == 'search':
+                return ('OK', [b'' if 'OR' in args else b'1 2 3'])
+            number, fields = args
+            if fields == '(BODY.PEEK[])':
+                self.assertEqual(number, b'3', 'Never fetch old or unrelated message bodies')
+                return ('OK', [(b'3', raw)])
+            received = now - dt.timedelta(seconds=10) if number == b'1' else now
+            stamp = received.strftime('%d-%b-%Y %H:%M:%S +0000')
+            headers = b'From: other@example.invalid\r\n' if number == b'2' else raw.split(b'\r\n\r\n')[0]
+            return ('OK', [(f'1 (INTERNALDATE "{stamp}" RFC822.SIZE 200)'.encode(), headers)])
+        client = Mock();client.uid.side_effect = uid
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+            secret = Path(directory) / 'fake.dpapi';secret.write_bytes(b'opaque-test')
+            credentials = json.dumps({'email': 'example@163.com', 'password': 'synthetic-secret'}).encode()
+            with patch.object(host, 'SECRET', secret), patch.object(host, 'protect', return_value=credentials), patch.object(host, 'connect', return_value=client), patch.object(host, 'diagnostic'):
+                result = host.handle({'action': 'poll', 'email': 'example@163.com', 'since': since})
+        self.assertEqual(len(result['messages']), 1)
+        self.assertEqual(result['messages'][0]['id'], '3')
+        self.assertEqual(calls[1], ('search', (None, 'SINCE', host.search_date(since))))
+        client.logout.assert_called_once()
+
     def test_diagnostic_contains_only_fixed_stages_and_counts(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
             with patch.object(host, 'ROOT', Path(directory)):

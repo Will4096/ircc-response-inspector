@@ -16,14 +16,14 @@ import struct
 import sys
 
 MAX_MESSAGE = 262144
-HELPER_VERSION = '1.3'
+HELPER_VERSION = '1.4'
 ROOT = Path(__file__).resolve().parent
 SECRET = ROOT / 'mailbox.dpapi'
 
 
 def diagnostic(stage, count=None):
     # Fixed vocabulary only: never log protocol payloads, exception text or secrets.
-    if stage not in {'start', 'login_ok', 'search_ok', 'messages_ready', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
+    if stage not in {'start', 'login_ok', 'search_ok', 'search_fallback', 'messages_ready', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
         return
     try:
         ROOT.mkdir(parents=True, exist_ok=True)
@@ -147,6 +147,14 @@ def internal_time(metadata):
     return time.mktime(parsed) * 1000
 
 
+def search_date(since):
+    # IMAP SINCE compares calendar dates, ignoring clock time and time zone.
+    # Start a UTC day earlier; INTERNALDATE below remains the exact time gate.
+    day = dt.datetime.fromtimestamp(since / 1000, dt.timezone.utc) - dt.timedelta(days=1)
+    month = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')[day.month - 1]
+    return f'{day.day:02d}-{month}-{day.year}'
+
+
 def handle(request):
     action = request.get('action')
     if action == 'status':
@@ -187,13 +195,20 @@ def handle(request):
         return {'ok': True}
     messages = []
     try:
-        date = dt.datetime.fromtimestamp(since / 1000, dt.timezone.utc).strftime('%d-%b-%Y')
+        date = search_date(since)
         # Server-side sender/date filter, not a whole-mailbox download.
         status, data = client.uid('search', None, 'SINCE', date, 'OR', 'FROM', 'cic.gc.ca', 'FROM', 'canada.ca')
         if status != 'OK':
             raise ValueError('mail.network')
         diagnostic('search_ok', len((data[0] or b'').split()))
-        for uid in (data[0] or b'').split()[-10:]:
+        if not (data[0] or b'').split():
+            # Some providers' compound header searches return empty results.
+            # Inspect a bounded header-only sample; validate sender before body fetch.
+            status, data = client.uid('search', None, 'SINCE', date)
+            if status != 'OK':
+                raise ValueError('mail.network')
+            diagnostic('search_fallback', len((data[0] or b'').split()))
+        for uid in (data[0] or b'').split()[-20:]:
             status, result = client.uid('fetch', uid, '(INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO DELIVERED-TO SUBJECT)])')
             if status != 'OK':
                 continue
