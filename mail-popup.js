@@ -24,7 +24,8 @@
     busy=true;
     try{
       if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
-      const data=await send(manualNext?'mailCheck':'mailPoll',{resume:resumeOnEnter});manualNext=false;resumeOnEnter=false;
+      const manual=manualNext,resume=resumeOnEnter;manualNext=false;resumeOnEnter=false;
+      const data=await send(manual?'mailCheck':'mailPoll',{resume});
       if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}
       const key=JSON.stringify([data,I18n.language]);if(key===signature)return;signature=key;
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
@@ -42,7 +43,7 @@
         }
         if(['unbound','expired'].includes(data.status)){const restart=node('button',say('重新开始自动收码','Restart automatic code retrieval'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
         if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
-        if(data.status==='mail.version')node('small',say('浏览器收到的版本：','Version received by browser: ')+(data.helper?.version||say('未提供','not supplied'))+say('；协议：','; protocol: ')+(data.helper?.protocol??say('未提供','not supplied'))+say('。要求：1.2 或更高的 1.x，协议 1。','Required: 1.x version 1.2 or later, protocol 1.'));
+        if(data.status==='mail.version')node('small',say('浏览器收到的版本：','Version received by browser: ')+(data.helper?.version||say('未提供','not supplied'))+say('；协议：','; protocol: ')+(data.helper?.protocol??say('未提供','not supplied'))+say('。要求：1.5 或更高的 1.x，协议 1。','Required: 1.x version 1.5 or later, protocol 1.'));
         if(data.status==='mail.helper'&&data.helper?.reason)node('small','Chrome: '+data.helper.reason);
         return;
       }

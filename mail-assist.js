@@ -19,7 +19,7 @@ async function mailNative(payload){
   try{const result=await chrome.runtime.sendNativeMessage(MAIL_NATIVE,payload);if(result?.error)throw new Error(result.error);
     const version=result?.helperVersion??result?.version;
     mailNativeObserved={version:typeof version==='string'&&/^\d+\.\d+(?:\.\d+)?$/.test(version)?version:null,protocol:Number.isInteger(result?.protocol)?result.protocol:null};
-    if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<2))throw new Error('mail.version');
+    if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<5))throw new Error('mail.version');
     mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};
     if(payload.action!=='clear'){const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;if(saved?.lastError==='mail.version')await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});}
     return result;}

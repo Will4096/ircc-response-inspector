@@ -10,7 +10,7 @@ const get=(db,key)=>key===null?{...db}:Object.fromEntries((Array.isArray(key)?ke
 const storage=db=>({get:async key=>get(db,key),set:async value=>Object.assign(db,JSON.parse(JSON.stringify(value))),remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete db[k];}});
 const context={URL,URLSearchParams,Date:Clock,Map,Set,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,atob,AbortSignal,normalizeApplicationNumber:s=>String(s || '').replace(/[^a-z0-9]/gi,'').toUpperCase(),chrome:{
   storage:{session:storage(stored),local:storage(persistent),onChanged:{addListener:fn=>events.push(fn)}},
-  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{nativeActions.push(payload.action);if(payload.action==='poll'){polls++;return {messages:mailbox,helperVersion:'1.2',protocol:1};}return {ok:true,helperVersion:'1.2',protocol:1};}},
+  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{nativeActions.push(payload.action);if(payload.action==='poll'){polls++;return {messages:mailbox,helperVersion:'1.5',protocol:1};}return {ok:true,helperVersion:'1.5',protocol:1};}},
   tabs:{get:async()=>({url}),onRemoved:{addListener(){}},onUpdated:{addListener(){}}}
 }};
 vm.createContext(context);for(const file of ['mail-core.js','mail-assist.js'])vm.runInContext(await read(file),context);
@@ -34,13 +34,13 @@ const diagnostic=MailCore.inspect([{...good,to:['different@163.com']},{...good,s
 assert.equal(diagnostic.rejected.recipient,1);assert.equal(diagnostic.rejected.purpose,1);
 assert.ok(!JSON.stringify(diagnostic).includes('123456')&&!JSON.stringify(diagnostic).includes('@'));
 let nativeSince;const originalNative=context.chrome.runtime.sendNativeMessage;
-context.chrome.runtime.sendNativeMessage=async(name,payload)=>{nativeSince=payload.since;return {messages:[],helperVersion:'1.2',protocol:1};};
+context.chrome.runtime.sendNativeMessage=async(name,payload)=>{nativeSince=payload.since;return {messages:[],helperVersion:'1.5',protocol:1};};
 await context.mailMessages({provider:'163',email:'test@163.com'},imapRequest);
 assert.equal(nativeSince,Math.floor(imapRequest.startedAt/1000)*1000,'Native prefilter must use the same precision as the matcher');
 context.chrome.runtime.sendNativeMessage=originalNative;
 context.chrome.runtime.sendNativeMessage=async()=>({ok:true,version:'1.1'});
 await assert.rejects(()=>context.mailNative({action:'status'}),/mail.version/);
-context.chrome.runtime.sendNativeMessage=async()=>({ok:true,helperVersion:'1.2',protocol:2});
+context.chrome.runtime.sendNativeMessage=async()=>({ok:true,helperVersion:'1.5',protocol:2});
 await assert.rejects(()=>context.mailNative({action:'status'}),/mail.version/);
 context.chrome.runtime.sendNativeMessage=originalNative;
  persistent.mailConnection={lastError:'mail.version'};

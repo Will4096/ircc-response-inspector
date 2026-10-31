@@ -27,3 +27,5 @@
 - The 163 helper is single-request, on demand. Settings rendering must not launch it. Pause fetching when candidates await confirmation; cancel new polling when the verification demand ends, allowing an in-flight request to finish and exit.
 
 - Native helper installation must be visible outside the Codex MSIX environment. Use %USERPROFILE%/.ircc-mail-helper and script-relative private data, verify physical paths and a non-packaged Windows registration probe; a subprocess self-test alone does not prove Chrome connectivity.
+
+- Save submission continuation metadata without OTPs or bodies. Reopening the same known Tracker verification context may resume; a new browser session or different tab requires explicit association. Preserve original submission time, consumed-code hashes and profile isolation. Never recreate a submission timestamp merely to find an email. All timezone calculations use the user's current device timezone, never a hardcoded location.
