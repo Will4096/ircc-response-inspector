@@ -17,4 +17,5 @@ async function removeProfileData(profileId){
   keys.push('capture:profile:'+profileId);
   await chrome.storage.session.remove(keys);
   await chrome.storage.local.remove('comparison:profile:'+profileId);
+  await chrome.storage.local.remove('mailPending:'+profileId);
 }

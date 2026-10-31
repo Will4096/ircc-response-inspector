@@ -22,7 +22,8 @@ const good={id:'one',receivedAt:time,from:'IRCC <notice@cic.gc.ca>',to:['test@16
 assert.equal(MailCore.candidates([good],req).length,1);
 const sharedMail={...good,from:'IRCC <do-not-reply-ircc-cxp-ne-pas-repondre-ircc-pxc@notification.canada.ca>',subject:'IRCC Portal – New version account – Confirm your account / Compte portail d’ IRCC – nouvelle version – Confirmez votre compte',text:'Your verification code is 123456.'};
 assert.equal(MailCore.candidates([sharedMail],req)[0].purpose,'TrackerAccountConfirmation');
-for(const change of [{from:'other@notification.canada.ca'},{subject:'IRCC Portal account creation'},{to:['other@163.com']},{receivedAt:time-2000},{text:'Your verification code is 123456. Reference 654321.'},{text:'Create an account. Your verification code is 123456.'}])assert.equal(MailCore.candidates([{...sharedMail,...change}],req).length,0);
+for(const change of [{from:'other@notification.canada.ca'},{subject:'IRCC Portal account creation'},{to:['other@163.com']},{receivedAt:time-2000},{text:'Your verification code is 123456. Reference 654321.'}])assert.equal(MailCore.candidates([{...sharedMail,...change}],req).length,0);
+assert.equal(MailCore.candidates([{...sharedMail,text:'Thank you for creating an account. Your verification code is 123456.'}],req).length,1,'Confirmed shared template is not vetoed by its own account wording');
 // Real IMAP INTERNALDATE drops milliseconds; a same-second arrival is not clearly old.
 const imapRequest={...req,provider:'163',startedAt:Math.floor(time/1000)*1000+750};
 const sameSecond={...good,receivedAt:Math.floor(time/1000)*1000};
@@ -101,7 +102,16 @@ await context.mailHandle({action:'mailIgnore',tabId:7,requestId:ignored.requestI
 time+=11000;assert.equal((await context.mailPoll(7)).status,'waiting');
 url='https://gc.auth.canada.ca/login';const beforeLeave=polls;assert.equal((await context.mailPoll(7)).status,'unbound','Expired Tracker session stops mailbox access');assert.equal(polls,beforeLeave);
 await assert.rejects(()=>context.mailHandle({action:'mailSave',config:{enabled:false}},{tab:{id:7},url:'https://ircc-services.canada.ca/2/ast-search'}));
-url='https://ircc-services.canada.ca/2/ast-otp-verification';await context.mailTrack(7,'TESTA');time+=600001;assert.equal((await context.mailPoll(7)).status,'expired');assert.equal((await context.mailPoll(7)).status,'expired');
+url='https://ircc-services.canada.ca/2/ast-otp-verification';await context.mailTrack(7,'TESTA');time+=600001;assert.equal((await context.mailPoll(7)).status,'paused');assert.equal((await context.mailPoll(7)).status,'paused');
+const originalSubmit=persistent['mailPending:A'].startedAt;
+mailbox=[{...sharedMail,text:'Thank you for creating an account. Your verification code is 123456.',receivedAt:originalSubmit+100}];
+assert.equal((await context.mailPoll(7,{resume:true})).status,'candidates','Reentering resumes the original submission without tracking a new request');
+assert.equal(persistent['mailPending:A'].startedAt,originalSubmit);
+vm.runInContext('mailRequests.clear();mailSecrets.clear()',context);for(const k of Object.keys(stored))if(k.startsWith('mail:'))delete stored[k];
+const beforeResume=polls;assert.equal((await context.mailPoll(7)).status,'paused','A new browser session requires explicit association');assert.equal(polls,beforeResume);
+assert.equal((await context.mailHandle({action:'mailCheck',tabId:7},{url:'chrome-extension://test/popup.html'})).status,'candidates','Manual check resumes saved submission without resubmission');
+assert.equal(persistent['mailPending:A'].startedAt,originalSubmit);
+assert.ok(!JSON.stringify(persistent['mailPending:A']).includes('123456'),'Saved continuation never contains the candidate');
 await context.mailTrack(7,'TESTA');persistent.mailAssist.enabled=false;const count=polls;assert.equal((await context.mailPoll(7)).status,'off');assert.equal(polls,count);
 // No accidental broad host grants, raw codes in export, or installer in runtime ZIP.
 const manifest=JSON.parse(await read('manifest.json'));

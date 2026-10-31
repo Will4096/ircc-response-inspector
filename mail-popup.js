@@ -2,9 +2,10 @@
 (()=>{
   const box=document.createElement('div');box.id='mailAssistStatus';box.hidden=true;
   box.setAttribute('role','status');box.setAttribute('aria-live','polite');
-  document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false;
+  document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false,resumeOnEnter=true,manualNext=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
   const labels={
+    paused:['本次自动检查已暂停','Automatic checking paused','提交记录已保留。点击检查本次邮件即可继续，无需重新提交查询。','The submission record is saved. Check this request’s email to continue without resubmitting the query.'],
     expired:['自动收码等待已结束','Automatic retrieval wait ended','已停止检查邮箱，这不代表验证码已过期。可粘贴已收到的验证码；也可返回 Tracker 重新查询。','Mailbox checks have stopped; this does not mean the code has expired. Paste the code you received, or restart the Tracker query.'],
     requesting:['已记录提交，等待 Tracker 验证页面','Submission recorded · waiting for Tracker','Tracker 正在处理本次提交，进入验证码页后再检查邮箱。','Tracker is processing this submission. Email checking starts on the verification page.'],
     unbound:['本次查询未在自动收码中','Automatic code retrieval is not active for this query','如需自动获取，请返回 Tracker 重新提交查询；已收到验证码可直接粘贴，无需重新查询。','To start automatic retrieval, return to Tracker and submit the query again. If you already have the code, paste it here without restarting.'],
@@ -17,13 +18,13 @@
   };
   function node(tag,text,parent=box){const e=document.createElement(tag);if(text)e.textContent=text;parent.append(e);return e;}
   async function tick(){
-    if(typeof workspaceVisible!=='undefined'&&!workspaceVisible)return;
+    if(typeof workspaceVisible!=='undefined'&&!workspaceVisible){resumeOnEnter=true;return;}
     if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
-    if(currentContext.stage!=='verification' || currentContext.observerReady===false || displayedCapture?.active){box.hidden=true;signature='';return;}
+    if(currentContext.stage!=='verification' || currentContext.observerReady===false || displayedCapture?.active){box.hidden=true;signature='';resumeOnEnter=true;return;}
     busy=true;
     try{
       if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
-      const data=await send('mailPoll');
+      const data=await send(manualNext?'mailCheck':'mailPoll',{resume:resumeOnEnter});manualNext=false;resumeOnEnter=false;
       if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}
       const key=JSON.stringify([data,I18n.language]);if(key===signature)return;signature=key;
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
@@ -31,6 +32,8 @@
         const text=labels[data.status] || labels['mail.network'];
         const heading=node('strong',text[I18n.language==='en'?1:0]);if(['waiting','requesting'].includes(data.status))heading.className='mail-loading';node('p',text[I18n.language==='en'?3:2]);
         if(data.status==='waiting'&&data.checkedAt)node('small',say('上次检查：','Last checked: ')+I18n.date(data.checkedAt));
+        if(data.requestedAt)node('small',say('本次提交：','Submitted: ')+I18n.date(data.requestedAt));
+        if(['waiting','paused','expired'].includes(data.status)){const check=node('button',say('检查本次邮件','Check this request’s email'));check.type='button';check.onclick=()=>{if(busy)return;check.disabled=true;manualNext=true;signature='';void tick();};}
         if(data.status==='waiting'&&data.diagnostic){
           const reasons={sender:['发件人不匹配','Sender not matched'],time:['收信时间不匹配','Receipt time not matched'],recipient:['收件人不匹配','Recipient not matched'],purpose:['未确认 Tracker 验证用途','Tracker verification purpose unconfirmed'],digits:['验证码缺失或存在多个数字','Missing code or ambiguous numbers'],excluded:['候选码已忽略或已尝试','Candidate ignored or already attempted']};
           const detail=node('details');node('summary',say('邮箱检查详情','Email check details'),detail);

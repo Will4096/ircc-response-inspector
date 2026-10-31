@@ -16,14 +16,14 @@ import struct
 import sys
 
 MAX_MESSAGE = 262144
-HELPER_VERSION = '1.4'
+HELPER_VERSION = '1.5'
 ROOT = Path(__file__).resolve().parent
 SECRET = ROOT / 'mailbox.dpapi'
 
 
 def diagnostic(stage, count=None):
     # Fixed vocabulary only: never log protocol payloads, exception text or secrets.
-    if stage not in {'start', 'login_ok', 'search_ok', 'search_fallback', 'messages_ready', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
+    if stage not in {'start', 'login_ok', 'search_ok', 'search_fallback', 'messages_ready', 'match_recipient', 'match_template', 'match_context', 'match_account_words', 'match_digits', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
         return
     try:
         ROOT.mkdir(parents=True, exist_ok=True)
@@ -147,10 +147,10 @@ def internal_time(metadata):
     return time.mktime(parsed) * 1000
 
 
-def search_date(since):
+def search_date(since, zone=None):
     # IMAP SINCE compares calendar dates, ignoring clock time and time zone.
-    # Start a UTC day earlier; INTERNALDATE below remains the exact time gate.
-    day = dt.datetime.fromtimestamp(since / 1000, dt.timezone.utc) - dt.timedelta(days=1)
+    # Use the Windows user's local calendar date, not an unconditional UTC shift.
+    day = dt.datetime.fromtimestamp(since / 1000, zone)
     month = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')[day.month - 1]
     return f'{day.day:02d}-{month}-{day.year}'
 
@@ -181,7 +181,7 @@ def handle(request):
     if action == 'poll':
         since = float(request.get('since', 0))
         now = dt.datetime.now(dt.timezone.utc).timestamp() * 1000
-        if not now - 601000 <= since <= now + 60000:
+        if not now - 86401000 <= since <= now + 60000:
             raise ValueError('mail.stale')
     if not SECRET.exists():
         raise ValueError('mail.credentials')
@@ -196,19 +196,14 @@ def handle(request):
     messages = []
     try:
         date = search_date(since)
-        # Server-side sender/date filter, not a whole-mailbox download.
-        status, data = client.uid('search', None, 'SINCE', date, 'OR', 'FROM', 'cic.gc.ca', 'FROM', 'canada.ca')
+        # NetEase's FROM search returned zero despite matching headers on this account.
+        # Fetch only a bounded header sample for the local-date request boundary;
+        # exact receipt time and sender checks below precede every body read.
+        status, data = client.uid('search', None, 'SINCE', date)
         if status != 'OK':
             raise ValueError('mail.network')
         diagnostic('search_ok', len((data[0] or b'').split()))
-        if not (data[0] or b'').split():
-            # Some providers' compound header searches return empty results.
-            # Inspect a bounded header-only sample; validate sender before body fetch.
-            status, data = client.uid('search', None, 'SINCE', date)
-            if status != 'OK':
-                raise ValueError('mail.network')
-            diagnostic('search_fallback', len((data[0] or b'').split()))
-        for uid in (data[0] or b'').split()[-20:]:
+        for uid in (data[0] or b'').split()[-10:]:
             status, result = client.uid('fetch', uid, '(INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO DELIVERED-TO SUBJECT)])')
             if status != 'OK':
                 continue
@@ -227,7 +222,14 @@ def handle(request):
             status, result = client.uid('fetch', uid, '(BODY.PEEK[])')
             if status == 'OK':
                 body = next((v[1] for v in result if isinstance(v, tuple)), b'')
-                messages.append(extract_message(uid.decode('ascii'), body, received))
+                message = extract_message(uid.decode('ascii'), body, received)
+                text = message['subject'] + '\n' + message['text']
+                diagnostic('match_recipient', int(address in message['to']))
+                diagnostic('match_template', int(bool(re.search(r'^IRCC Portal\s*[-–—]\s*New version account\s*[-–—]\s*Confirm your account', message['subject'], re.I))))
+                diagnostic('match_context', int(bool(re.search(r'(verification|one[ -]time|security|confirmation)\s*(code|password)|code\s+de\s+v[ée]rification', text, re.I))))
+                diagnostic('match_account_words', int(bool(re.search(r'(create|creating|register|registration|new)\s+(an?\s+)?(IRCC\s+)?(portal\s+)?account|permanent\s+residen(ce|t)\s+portal|account\s+creation', text, re.I))))
+                diagnostic('match_digits', len(set(re.findall(r'(?<!\d)\d{6}(?!\d)', text))))
+                messages.append(message)
         diagnostic('messages_ready', len(messages))
         return {'messages': messages}
     finally:

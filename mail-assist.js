@@ -29,9 +29,16 @@ async function mailNative(payload){
   }if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
 }
 async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
-async function mailCancel(tabId,expected){
+async function mailEpoch(){const key='mail:epoch';let epoch=(await chrome.storage.session.get(key))[key];if(!epoch){epoch=crypto.randomUUID();await chrome.storage.session.set({[key]:epoch});}return epoch;}
+async function mailRemember(request,state){
+  if(!request)return;const epoch=request.epoch||await mailEpoch();request.epoch=epoch;
+  await mailWrite(async()=>{const {applications=[]}=await chrome.storage.local.get('applications');const key='mailPending:'+request.profileId;if(!applications.some(p=>p.id===request.profileId)){await chrome.storage.local.remove(key);return;}await chrome.storage.local.set({[key]:{...request,state,updatedAt:Date.now()}});});
+}
+async function mailCancel(tabId,expected,state='paused'){
   if(expected&&mailRequests.get(tabId)?.id!==expected.id)return;
+  const previous=mailRequests.get(tabId);
   mailRequests.delete(tabId);mailSecrets.delete(tabId);
+  if(previous)await mailRemember(previous,state);
   await mailWrite(async()=>{const key='mail:request:'+tabId,saved=(await chrome.storage.session.get(key))[key];if(!expected||saved?.id===expected.id)await chrome.storage.session.remove(key);});
 }
 async function mailCancelAll(){
@@ -45,7 +52,7 @@ async function mailForget(){
   await mailCancelAll();mailGmailTokens.clear();
   let helperCleared=true;
   if(await chrome.permissions.contains({permissions:['nativeMessaging']}))try{await mailNative({action:'clear'});}catch{helperCleared=false;}
-  await chrome.storage.local.remove(['mailAssist','mailConnection']);return helperCleared;
+  const all=await chrome.storage.local.get(null);await chrome.storage.local.remove(['mailAssist','mailConnection',...Object.keys(all).filter(k=>k.startsWith('mailPending:'))]);return helperCleared;
 }
 function mailExtensionSender(sender){return !!sender.url?.startsWith(chrome.runtime.getURL(''));}
 function mailTrackerSender(sender){try{return new URL(sender.url).origin==='https://ircc-services.canada.ca';}catch{return false;}}
@@ -91,9 +98,9 @@ async function mailMessages(config,request){
   }
   return messages;
 }
-async function mailBinding(request){
+async function mailBinding(request,allowPaused=false){
   const config=await mailConfig(),selected=await chrome.storage.local.get(['selectedApplicationId','applications']);
-  if(!config.enabled || !request || request.deadline<Date.now() || selected.selectedApplicationId!==request.profileId || config.email!==request.email || config.provider!==request.provider || !selected.applications?.some(p=>p.id===request.profileId))return null;
+  if(!config.enabled || !request || (!allowPaused&&request.deadline<Date.now()) || selected.selectedApplicationId!==request.profileId || config.email!==request.email || config.provider!==request.provider || !selected.applications?.some(p=>p.id===request.profileId))return null;
   const profile=selected.applications.find(p=>p.id===request.profileId);
   if(request.applicationNumber&&normalizeApplicationNumber(profile.applicationNumber)!==request.applicationNumber)return null;
   return config;
@@ -118,13 +125,14 @@ async function mailTrackNow(tabId,number,observedAt){
   if(!profile || normalizeApplicationNumber(profile.applicationNumber)!==normalizeApplicationNumber(number) || !number)return {ok:false};
   // Only one outstanding request per mailbox: no speculative cross-profile matching.
   await mailCancelAll();
-  const request={id:crypto.randomUUID(),profileId:profile.id,applicationNumber:normalizeApplicationNumber(number),email:config.email,provider:config.provider,startedAt:observedAt,deadline:observedAt+MAIL_WINDOW};
+  const request={id:crypto.randomUUID(),tabId,profileId:profile.id,applicationNumber:normalizeApplicationNumber(number),email:config.email,provider:config.provider,startedAt:observedAt,deadline:observedAt+MAIL_WINDOW};
   mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});
   mailEnded.delete(tabId);
   await mailDiagnostic('request_linked');
+  await mailRemember(request,'waiting');
   await mailWrite(async()=>{if(mailRequests.get(tabId)===request)await chrome.storage.session.set({['mail:request:'+tabId]:request});});return {ok:true};
 }
-async function mailPoll(tabId){
+async function mailPoll(tabId,options={}){
   if(mailTrackingTabs.has(tabId))return {status:'requesting'};
   if(mailPollLocks.has(tabId))return {status:'waiting'};
   let request=mailRequests.get(tabId);
@@ -132,19 +140,35 @@ async function mailPoll(tabId){
     const saved=(await chrome.storage.session.get('mail:request:'+tabId))['mail:request:'+tabId];
     if(mailTrackingTabs.has(tabId))return {status:'requesting'};
     request=mailRequests.get(tabId)||saved;
+    if(!request){
+      const selected=(await chrome.storage.local.get('selectedApplicationId')).selectedApplicationId;
+      const pending=(await chrome.storage.local.get('mailPending:'+selected))['mailPending:'+selected];
+      if(pending&&['waiting','paused','candidate'].includes(pending.state)&&Date.now()-pending.startedAt<=86400000&&await mailBinding(pending,true)){
+        if(pending.state==='paused'&&!options.resume&&!options.manual)return {status:'paused',canResume:true,profileId:selected,requestedAt:pending.startedAt};
+        const sameContext=pending.epoch===await mailEpoch()&&pending.tabId===tabId;
+        if(sameContext||options.manual)request={...pending,tabId};
+        else return {status:'paused',canResume:true,profileId:selected,requestedAt:pending.startedAt};
+      }
+    }
     if(request&&!mailRequests.has(tabId)){mailRequests.set(tabId,request);mailSecrets.set(tabId,{excluded:new Set(),candidates:[]});}
   }
-  const config=await mailBinding(request);
+  const config=await mailBinding(request,true);
   if(mailTrackingTabs.has(tabId)||mailRequests.get(tabId)!==request)return {status:'requesting'};
   if(!config){const expired=request&&request.deadline<Date.now();await mailCancel(tabId,request);if(expired)mailEnded.set(tabId,request.profileId);const settings=await mailConfig(),selected=await chrome.storage.local.get('selectedApplicationId');return {status:!settings.enabled?'off':mailEnded.get(tabId)===selected.selectedApplicationId?'expired':'unbound'};}
   let tab;try{tab=await chrome.tabs.get(tabId);}catch{await mailCancel(tabId,request);return {status:'unbound'};}
   // A submit click precedes navigation. A stale UI poll must not erase that new binding.
   if(mailPage(tab.url)==='/2/ast-search')return {status:'requesting',profileId:request.profileId};
   if(mailPage(tab.url)!=='/2/ast-otp-verification'){await mailCancel(tabId,request);return {status:'unbound'};}
+  if(options.manual){request.epoch=await mailEpoch();await mailRemember(request,'waiting');}
+  if(request.deadline<Date.now()){
+    if(!options.resume&&!options.manual){await mailRemember(request,'paused');return {status:'paused',canResume:true,profileId:request.profileId,requestedAt:request.startedAt};}
+    if(Date.now()-request.startedAt>86400000)return {status:'unbound'};
+    request.deadline=Date.now()+MAIL_WINDOW;await mailRemember(request,'waiting');await chrome.storage.session.set({['mail:request:'+tabId]:request});
+  }
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:secrets.error==='mail.helper'?{reason:mailNativeStatus?.reason}:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',requestedAt:request.startedAt,checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:secrets.error==='mail.helper'?{reason:mailNativeStatus?.reason}:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.candidates.length)return display(); // Waiting for confirmation is not a new fetch demand.
-  if(secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
+  if(!options.manual&&secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
   try{
     await mailDiagnostic('fetch_start');
@@ -156,6 +180,7 @@ async function mailPoll(tabId){
     const candidates=inspection.candidates;
     const filtered=[];for(const c of candidates)if(!(request.consumed || []).includes(await mailDigest(request,c.code)))filtered.push(c);
     secrets.candidates=filtered;delete secrets.error;
+    await mailRemember(request,filtered.length?'candidate':'waiting');
     await mailDiagnostic('matched',filtered.length);
     const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
     if(saved?.email===config.email && saved.lastError)await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});
@@ -174,6 +199,7 @@ async function mailDigest(request,code){return Array.from(new Uint8Array(await c
 async function mailExclude(tabId,request,candidates){
   request.consumed=[...new Set([...(request.consumed || []),...await Promise.all(candidates.map(c=>mailDigest(request,c.code)))])].slice(-30);
   await mailWrite(async()=>{if(mailRequests.get(tabId)!==request)throw new Error('mail.stale');await chrome.storage.session.set({['mail:request:'+tabId]:request});});
+  await mailRemember(request,'waiting');
 }
 async function mailTake(tabId,message){
   const request=mailRequests.get(tabId),secrets=mailSecrets.get(tabId);
@@ -236,13 +262,14 @@ async function mailHandle(message,sender){
     const {applications=[]}=await chrome.storage.local.get('applications');const profile=applications.find(p=>p.id===mailRequests.get(tabId).profileId);
     return mailTrack(tabId,profile.applicationNumber);
   }
-  if(message.action==='mailPoll')return mailPoll(tabId);
+  if(message.action==='mailPoll')return mailPoll(tabId,{resume:extension&&message.resume===true});
+  if(message.action==='mailCheck'){if(!extension)throw Error('mail.permission');return mailPoll(tabId,{manual:true,resume:true});}
   if(message.action==='mailIgnore'){
     const req=mailRequests.get(tabId);if(!await mailContext(tabId,req) || req.id!==message.requestId)throw new Error('mail.stale');
     const s=mailSecrets.get(tabId);const candidates=s?.candidates || [];for(const c of candidates)s.excluded.add(c.code);if(s)s.candidates=[];
     await mailExclude(tabId,req,candidates);return {ok:true};
   }
-  if(message.action==='mailCancel'){await mailCancel(tabId);return {ok:true};}
+  if(message.action==='mailCancel'){await mailCancel(tabId,undefined,'cancelled');return {ok:true};}
   throw new Error('mail.permission');
 }
 chrome.storage.onChanged.addListener((changes,area)=>{
@@ -253,5 +280,5 @@ chrome.storage.onChanged.addListener((changes,area)=>{
 });
 chrome.tabs.onRemoved.addListener(id=>void mailCancel(id));
 chrome.tabs.onUpdated.addListener((id,change)=>{
-  if(change.url && !['/2/ast-search','/2/ast-otp-verification'].includes(mailPage(change.url)))void mailCancel(id);
+  if(change.url && !['/2/ast-search','/2/ast-otp-verification'].includes(mailPage(change.url)))void (async()=>{const request=mailRequests.get(id);await mailCancel(id);if(request&&/^\/2\/ast-(details|view-application|history)/.test(mailPage(change.url)))await mailRemember(request,'completed');})();
 });

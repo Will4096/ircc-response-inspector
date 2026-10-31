@@ -196,7 +196,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         for(const [tabId,p] of [...searchSubmissions])await cancelSearchSubmit(tabId,p.id);
         const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
         const nextLocal={applications:data.applications,selectedApplicationId:data.selectedApplicationId,uiLanguage:data.uiLanguage,autoFill:data.autoFill},nextSession={};
-        for(const key of Object.keys(local))if(key.startsWith('comparison:profile:'))nextLocal[key]=null;
+        for(const key of Object.keys(local))if(key.startsWith('comparison:profile:')||key.startsWith('mailPending:'))nextLocal[key]=null;
         for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:')||key.startsWith('pageNotice:')||key.startsWith('autoSubmit:'))nextSession[key]=null;
         for(const [id,value] of Object.entries(data.comparisons))nextLocal['comparison:profile:'+id]=value;
         for(const [id,value] of Object.entries(data.captures))nextSession['capture:profile:'+id]=value;
@@ -458,7 +458,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     if (message.action === 'stop') {
       await cancelSearchSubmit(id);
-      await mailCancel(id);
+      await mailCancel(id,undefined,'cancelled');
       if(sessions.get(id)?.active)await finish(id,'stopped','已停止');
       return {ok:true};
     }

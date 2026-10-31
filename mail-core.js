@@ -27,7 +27,7 @@ var MailCore=(()=>{
       // Positive Tracker context AND a verification purpose; IRCC + six digits is insufficient.
       if(!sharedTemplate&&!/(?:application\s+status\s+tracker|IRCC\s+tracker|suivi\s+(?:de\s+)?(?:l[’']état|des demandes))/i.test(text)){skip('purpose');continue;}
       if(!/(?:verification|one[ -]time|security|confirmation)\s*(?:code|password)|code\s+de\s+v[ée]rification/i.test(text)){skip('purpose');continue;}
-      if(/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|permanent\s+residen(?:ce|t)\s+portal|account\s+creation/i.test(text)){skip('purpose');continue;}
+      if((!sharedTemplate&&/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|account\s+creation/i.test(text))||/permanent\s+residen(?:ce|t)\s+portal/i.test(text)){skip('purpose');continue;}
       const digits=[...new Set(text.match(/(?<!\d)\d{6}(?!\d)/g) || [])];
       if(digits.length!==1){skip('digits');continue;}
       if(excluded.has(digits[0])){skip('excluded');continue;}
