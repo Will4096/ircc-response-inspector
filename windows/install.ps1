@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Windows only.' }
 # Per-user installation. No administrator rights, service, scheduled task or listening port.
-$helperHome = Join-Path $env:LOCALAPPDATA 'IRCCMailHelper'
+$helperHome = Join-Path $env:USERPROFILE '.ircc-mail-helper'
 $pythonCandidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'),
     (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python314\python.exe')
@@ -20,6 +20,13 @@ if (-not $pythonExe -and $InstallPython) {
 }
 if (-not $pythonExe) { throw 'Python 3.13+ is required. Run with -InstallPython to install from the official winget package.' }
 New-Item -ItemType Directory -Path $helperHome -Force | Out-Null
+# Avoid MSIX AppData redirection: Chrome must see the same physical files.
+# Migrate only the opaque, current-user DPAPI blob; never decrypt or print it.
+$previousSecret = Join-Path (Join-Path $env:LOCALAPPDATA 'IRCCMailHelper') 'mailbox.dpapi'
+$currentSecret = Join-Path $helperHome 'mailbox.dpapi'
+if (!(Test-Path -LiteralPath $currentSecret) -and (Test-Path -LiteralPath $previousSecret)) {
+    Copy-Item -LiteralPath $previousSecret -Destination $currentSecret
+}
 $hostScript = Join-Path $helperHome 'mail_host.py'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'mail_host.py') -Destination $hostScript -Force
 $launcher = Join-Path $helperHome 'IRCCMailHost.exe'

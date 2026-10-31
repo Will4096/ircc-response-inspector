@@ -28,3 +28,4 @@ __pycache__/
 *.pyc
 *.dpapi
 .tmp-mail-helper/
+windows/diagnostic*.log

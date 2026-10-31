@@ -16,8 +16,8 @@ import struct
 import sys
 
 MAX_MESSAGE = 262144
-HELPER_VERSION = '1.2'
-ROOT = Path(os.environ.get('LOCALAPPDATA', '.')) / 'IRCCMailHelper'
+HELPER_VERSION = '1.3'
+ROOT = Path(__file__).resolve().parent
 SECRET = ROOT / 'mailbox.dpapi'
 
 

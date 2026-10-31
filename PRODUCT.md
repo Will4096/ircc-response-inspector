@@ -129,3 +129,7 @@
 ## 3.9.6 Chrome 启动失败分类
 
 实际启动器带 Chrome 参数自检成功，注册文件存在，未发现本机通信禁用策略，但浏览器仍未连接。旧错误处理吞掉了 Chrome 启动原因；新增固定类别 not-found / forbidden / exited / protocol / unknown，显示于检查结果和取码卡片，不保存原始异常文本。尚未取得浏览器当前类别，不能把自检成功当成 Chrome 链路成功。
+
+## 3.9.7 修复安装路径重定向
+
+实际文件路径检查发现原 AppData 安装解析到 Codex MSIX LocalCache，先前命令行自检不足以证明 Chrome 能访问。安装位置改为用户目录 .ircc-mail-helper，辅助程序 1.3 以脚本物理目录定位加密授权与日志，迁移旧 DPAPI 文件但不解密。独立无应用身份的 Windows 进程确认注册路径存在，实际程序版本自检通过；浏览器最终连接状态仍由 Chrome 检查确认。
