@@ -120,6 +120,12 @@ async function harness(saved){
   assert.equal((await h.send('getContext')).observerReady,false,'A stale/missing content script requires refresh');
   h.context.chrome.tabs.sendMessage=async()=>({requestTracking:true,version:manifest.version});
   assert.equal((await h.send('getContext')).observerReady,true,'Current submit observer acknowledges its version');
+  h.context.chrome.tabs.sendMessage=async()=>({requestTracking:true,version:'3.9.8'});
+  assert.equal((await h.send('getContext')).observerReady,true,'Compatible previous extension version does not block the current OTP page');
+  let injected=false;
+  h.context.chrome.tabs.sendMessage=async()=>injected?{requestTracking:true,protocol:1}:undefined;
+  h.context.chrome.scripting={executeScript:async request=>{if(request.files){assert.equal(request.files.join(','),'mail-content.js');injected=true;}return [{result:{expired:false}}];}};
+  assert.equal((await h.send('getContext')).observerReady,true,'Missing observer repairs in place without navigating to the search form');
   h.context.chrome.tabs.get=async id=>{assert.equal(id,7);return {url:'https://ircc-services.canada.ca/2/ast-search'};};
   assert.equal((await h.sendExtension({action:'getContext',tabId:7},{tab:{id:99},url:'chrome-extension://test/popup.html'})).stage,'form','Extension views address the Tracker tab, not their own container tab');
 }

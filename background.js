@@ -266,7 +266,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       if(expired){await cancelSearchSubmit(id);await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'expired',tabId:id};}
       let observerReady;
       if(tab.status!=='loading'&&allowed(tab.url)&&['/2/ast-search','/2/ast-otp-verification'].includes(url.pathname)){
-        try{const health=await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'});observerReady=health?.requestTracking===true&&health.version===chrome.runtime.getManifest().version;}catch{observerReady=false;}
+        const compatible=health=>health?.requestTracking===true&&(health.protocol===undefined||health.protocol===1);
+        try{observerReady=compatible(await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'}));}catch{observerReady=false;}
+        if(!observerReady)try{await chrome.scripting.executeScript({target:{tabId:id},files:['mail-content.js']});observerReady=compatible(await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'}));}catch{observerReady=false;}
       }
       const notice=(await chrome.storage.session.get('pageNotice:'+id))['pageNotice:'+id],selection=await chrome.storage.local.get('selectedApplicationId');
       const pageNotice=notice?.path===url.pathname&&notice.profileId===selection.selectedApplicationId&&Date.now()-notice.createdAt<300000?notice:null;

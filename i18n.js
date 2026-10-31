@@ -20,6 +20,8 @@ globalThis.I18n=(()=>{
     '取消后可自行检查资料，并在官网手动点击 Submit。':'Cancel to review the details and click Submit on Tracker yourself.',
     '取消自动提交':'Cancel auto-submit',
     '立即提交':'Submit now',
+    '页面辅助暂未连接，可重试连接；手动输入验证码仍可使用。':'Page assistance is not connected. Retry the connection, or enter the code manually.',
+    '重试页面连接':'Retry page connection',
     '连接检查与安装帮助':'Connection checks and installation help',
     '实际版本 / 协议：':'Received version / protocol: ',
     '本机程序版本不兼容，请使用安装帮助中的命令更新。':'The helper version is incompatible. Update it using the command in installation help.',

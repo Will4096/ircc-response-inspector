@@ -87,7 +87,7 @@
     assert(!w.document.querySelector('iframe[data-view="popup.html"]').contentDocument.getElementById('export'),'query results do not contain a low-frequency backup action');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&observer=missing');await settle();await settle();await new Promise(r=>setTimeout(r,1700));
     const stale=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
-    assert(stale.getElementById('openTracker').textContent==='重新加载查询表单'&&stale.getElementById('mailAssistStatus').hidden,'stale Tracker script shows refresh rather than misleading request-unbound status');
+    assert(stale.getElementById('openTracker').textContent==='重试页面连接'&&!stale.getElementById('mailAssistStatus').hidden&&!stale.getElementById('verifyForm').hidden,'missing observer preserves manual verification and mailbox checks without requiring a new query');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=login');await settle();await settle();
     const loginWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow,loginDoc=loginWindow.document,entries=[];let newTabs=0;const originalSend=w.chrome.runtime.sendMessage;
     w.chrome.tabs.create=async()=>{newTabs++;return {id:99};};w.chrome.runtime.sendMessage=async message=>{if(message.action==='openTrackerPage'){entries.push({tabId:message.tabId,resume:message.resume});return {ok:true,tabId:1};}return originalSend(message);};

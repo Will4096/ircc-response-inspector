@@ -29,3 +29,5 @@
 - Native helper installation must be visible outside the Codex MSIX environment. Use %USERPROFILE%/.ircc-mail-helper and script-relative private data, verify physical paths and a non-packaged Windows registration probe; a subprocess self-test alone does not prove Chrome connectivity.
 
 - Save submission continuation metadata without OTPs or bodies. Reopening the same known Tracker verification context may resume; a new browser session or different tab requires explicit association. Preserve original submission time, consumed-code hashes and profile isolation. Never recreate a submission timestamp merely to find an email. All timezone calculations use the user's current device timezone, never a hardcoded location.
+
+- Never hide manual OTP entry or redirect an existing verification page to the search form solely because a content script has an older extension version. Repair compatible observers in place; mailbox retrieval uses the saved submission, and missing observers must not force resubmission.

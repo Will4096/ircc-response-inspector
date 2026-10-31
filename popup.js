@@ -90,7 +90,7 @@ function renderContext(context,data={}){
   for(const node of document.querySelectorAll?.('#querySteps li') || []){const step=Number(node.dataset.step);node.dataset.current=String(step===state.step);node.dataset.complete=String(step<state.step || complete);}
   if(!currentContext.autoSubmit&&currentContext.pageNotice?.kind==='filled'&&/手动|未完整|未就绪|未选择|校验|取消|已变化|无法|失败/.test(currentContext.pageNotice.text||''))$('entryState').textContent=msg(currentContext.pageNotice.text);
   if(currentContext.pageNotice?.kind==='pageError')$('entryState').textContent=t('Tracker 页面暂未就绪，请检查官网提示，必要时刷新。');
-  if(currentContext.observerReady===false){$('entryState').textContent=t('Tracker 页面仍在使用旧版脚本。重新加载查询表单后，请核对并点击官网 Submit。');$('openTracker').hidden=false;$('openTracker').textContent=t('重新加载查询表单');$('fill').hidden=true;$('verifyForm').hidden=true;}
+  if(currentContext.observerReady===false){$('entryState').textContent=t('页面辅助暂未连接，可重试连接；手动输入验证码仍可使用。');$('openTracker').hidden=false;$('openTracker').textContent=t('重试页面连接');$('fill').hidden=true;$('verifyForm').hidden=currentContext.stage!=='verification';}
 }
 
 function renderCapture(data){
@@ -249,7 +249,7 @@ $('openTracker').onclick=async()=>{try{
     return;
   }
   if(currentContext.stage==='expired'){await requestTrackerEntry(false);return;}
-  if(currentContext.observerReady===false){if(currentContext.stage==='verification')await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});else await chrome.tabs.reload(targetTabId);return;}
+  if(currentContext.observerReady===false){lastSnapshot='';await refreshCapture();return;}
   if(currentContext.stage==='form'&&displayedCapture?.status==='ready'){
     const result=await send('locateSubmit');setOutput(result?.ok?'请在 Tracker 官网核对资料，再点击高亮的 Submit。':'未找到官网 Submit，请检查左侧表单是否完整。');return;
   }

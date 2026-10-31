@@ -20,7 +20,7 @@
   async function tick(){
     if(typeof workspaceVisible!=='undefined'&&!workspaceVisible){resumeOnEnter=true;return;}
     if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
-    if(currentContext.stage!=='verification' || currentContext.observerReady===false || displayedCapture?.active){box.hidden=true;signature='';resumeOnEnter=true;return;}
+    if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';resumeOnEnter=true;return;}
     busy=true;
     try{
       if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
