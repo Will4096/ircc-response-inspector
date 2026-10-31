@@ -25,3 +25,4 @@
 
 - Missing tab.url is an access/association state, not proof that Tracker is absent. Model Chrome's withheld URL and permission approval/denial in tests; request only the two optional official authentication origins on an explicit click, and never default to creating a duplicate tab on refusal.
 - The 163 helper is single-request, on demand. Settings rendering must not launch it. Pause fetching when candidates await confirmation; cancel new polling when the verification demand ends, allowing an in-flight request to finish and exit.
+`n- Native helper installation must be visible outside the Codex MSIX environment. Use %USERPROFILE%/.ircc-mail-helper and script-relative private data, verify physical paths and a non-packaged Windows registration probe; a subprocess self-test alone does not prove Chrome connectivity.

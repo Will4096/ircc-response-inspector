@@ -1,7 +1,7 @@
 // Fixed version + digest: never execute a moving branch or pipe a download to Invoke-Expression.
 (()=>{
-  const commit='0c4c78eea47d72ecda9a7cd57caa2acf38bd3345';
-  const hash='7f51e7a1d3dae348aa1978591d28a72812890ca88380ad27a43411ff3666b921';
+  const commit='4ea44f4f2577db563fab4a20e2e7e686e821170a';
+  const hash='8cb488192420f2c7ca4cf272ebe4c3582fb1039248dbe37e05cd1dbf52e11633';
   const url='https://raw.githubusercontent.com/Will4096/ircc-response-inspector/'+commit+'/windows/install-one-click.ps1';
   const command=document.getElementById('installerCommand'),copy=document.getElementById('installerCopy'),feedback=document.getElementById('installerFeedback');
   if(!command||!copy)return;
