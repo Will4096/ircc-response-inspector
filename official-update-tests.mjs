@@ -22,4 +22,13 @@ context.document={body:{get innerText(){return pageText;}},querySelector:selecto
 assert.equal(context.readOverview().application.irccUpdatedAt.value,'November 2, 2026');
 pageText='Application number: APP1 Date modified: 2026-11-02';
 assert.equal(context.readOverview().application.irccUpdatedAt,undefined,'Government footer modification date is not an application update');
+const history=[{dateCreated:'2026-10-30',dateLoaded:'2099-01-01'},{dateCreated:'2026-11-02'},{dateCreated:'2026-10-31'}];
+const unchanged=JSON.stringify(history);
+assert.equal(context.historyLastUpdate(history).value,'2026-11-02');
+assert.equal(context.historyLastUpdate([...history].reverse()).value,'2026-11-02');
+assert.equal(JSON.stringify(history),unchanged,'History order and raw entries are preserved');
+assert.equal(context.historyLastUpdate([{dateCreated:'bad',date:'2026-11-01'}]).value,'2026-11-01');
+assert.equal(context.historyLastUpdate([{dateLoaded:'2099-01-01'}]),null,'Loading timestamps never substitute for History event time');
+assert.equal(context.applicantsHistoryLastUpdate([{history:[{dateCreated:'2026-10-30'}]},{history},{history:[]}]).value,'2026-11-02');
 console.log('PASS: official application update source, date-only preservation, nested/encoded replies, profile isolation, absent/invalid fields, and no History/query-time inference.');
+console.log('PASS: latest History update independent of order, per-person aggregation, invalid dates, no mutation and no load-time substitution.');

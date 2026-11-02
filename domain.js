@@ -1,4 +1,21 @@
 var TrackerAuthOrigins=['https://gc.auth.canada.ca/*','https://clegc-gckey.gc.ca/*'];
+function historyLastUpdate(history=[]){
+  let latest=null;
+  for(const entry of history||[]){
+    if(!entry||typeof entry!=='object')continue;
+    // dateLoaded is a transport/load marker, not the History event date.
+    const value=[entry.dateCreated,entry.date,entry.createdAt,entry.activityDate,entry.eventDate].find(date=>typeof date==='string'&&date.trim()&&Number.isFinite(Date.parse(date)));
+    if(!value)continue;
+    const time=Date.parse(value);
+    if(!latest||time>latest.time)latest={value,time,source:'History'};
+  }
+  return latest;
+}
+function applicantsHistoryLastUpdate(applicants=[]){
+  let latest=null;
+  for(const person of applicants||[]){const update=historyLastUpdate(person.history);if(update&&(!latest||update.time>latest.time))latest=update;}
+  return latest;
+}
 // Application-level official update metadata only; never infer it from History or capture time.
 function officialApplicationUpdate(responses,number){
   const normalize=value=>String(value||'').replace(/[^a-z0-9]/gi,'').toUpperCase();

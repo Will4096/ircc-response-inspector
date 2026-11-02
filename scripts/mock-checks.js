@@ -130,6 +130,12 @@
     assert(candidate.querySelector('code')?.textContent==='123456'&&candidate.textContent.includes('通用模板')&&candidate.querySelector('button.primary')&&!candidate.querySelector('button.primary').disabled,'shared IRCC confirmation template displays a candidate for explicit review');
     let mailWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;
     assert(mailWindow.getComputedStyle(mailWindow.document.getElementById('verifyForm')).display==='none','candidate mode removes the duplicate manual primary action');
+    assert(!mailWindow.document.getElementById('mailAutoQuickToggle').checked&&candidate.textContent.includes('当前为手动验证'),'candidate card makes automatic verification off-state explicit');
+    mailWindow.document.getElementById('mailAutoQuickToggle').click();await new Promise(r=>setTimeout(r,900));
+    assert(candidate.textContent.includes('秒后自动验证')&&(await w.chrome.storage.local.get('mailAutoVerify')).mailAutoVerify===true,'enabling automatic verification in the card saves preference and starts countdown');
+    w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();
+    assert(w.document.querySelector('iframe[data-view="settings.html"]').contentDocument.getElementById('mailAutoVerify').checked,'card preference stays synchronized with settings');
+    w.document.querySelector('[data-view="popup.html"]').click();await settle();await settle();
     [...candidate.querySelectorAll('button')].find(b=>b.textContent==='改为手动输入').click();await settle();await new Promise(r=>setTimeout(r,1600));
     assert(mailWindow.getComputedStyle(mailWindow.document.getElementById('verifyForm')).display!=='none'&&!candidate.querySelector('button.primary'),'manual mode preserves one primary action and pauses automation');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared&autoVerify=1');await new Promise(r=>setTimeout(r,2100));
@@ -146,7 +152,9 @@
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared&autoVerify=1');await new Promise(r=>setTimeout(r,7400));
     assert(w.__mailVerifyCount===1,'automatic code verification submits once after five seconds');
     w=await load('/popup.html?surface=panel&stage=results');await settle();
-    assert(w.document.getElementById('updates').textContent.includes('IRCC 最后更新时间：2026-10-28'),'comparison displays official update date separately from query comparison time');
+    assert(w.document.getElementById('updates').textContent.includes('IRCC 最后更新（History）：2026-10-29'),'comparison uses newest applicant History date, independently of query time and explicit metadata');
+    const personUpdates=[...w.document.querySelectorAll('.person-updated')].map(node=>node.textContent);
+    assert(personUpdates[0].includes('2026-10-28')&&personUpdates[1].includes('2026-10-29'),'each applicant row displays its own latest History date');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared&autoVerify=1&lang=en');await new Promise(r=>setTimeout(r,2100));
     mailWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;card=mailWindow.document.getElementById('mailAssistStatus');
     assert(card.textContent.includes('Verifying in')&&mailWindow.document.documentElement.scrollWidth===mailWindow.document.documentElement.clientWidth,'English verification countdown fits narrow side panel');

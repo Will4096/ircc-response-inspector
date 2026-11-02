@@ -32,4 +32,4 @@
 
 - Never hide manual OTP entry or redirect an existing verification page to the search form solely because a content script has an older extension version. Repair compatible observers in place; mailbox retrieval uses the saved submission, and missing observers must not force resubmission.
 
-- IRCC last-update display must use explicit application-level official response metadata or the Tracker application update label. Never substitute capture time, HTTP Date, History dates or page-footer modification dates. Preserve date-only values without timezone conversion; display missing official values honestly.
+- As explicitly requested, displayed last-update times come from the latest dated History event: per applicant and overall maximum across applicants. Label the History source, preserve date-only values without timezone conversion, do not reorder or modify records, and never substitute dateLoaded, capture time or page-footer modification dates. Explicit application metadata may be retained separately but does not replace this History-based display.

@@ -97,6 +97,11 @@
       const title=node('strong',manualMode?say('已切换手动输入','Manual entry selected'):countdown?say('准备自动验证…','Preparing automatic verification…'):data.autoEnabled&&paused?say('自动验证已暂停','Automatic verification paused'):say('核对邮箱验证码','Review email verification code'));
       if(countdown)title.dataset.autoCountdown='1';
       node('p',say('目标申请：','Target profile: ')+(document.getElementById('application').selectedOptions[0]?.textContent || ''));
+      const preference=node('label');preference.className='toggle mail-auto-preference';
+      const quick=document.createElement('input');quick.type='checkbox';quick.id='mailAutoQuickToggle';quick.checked=!!data.autoEnabled;quick.setAttribute('aria-describedby','mailAutoQuickHelp');preference.append(quick);
+      node('span',say('自动验证（5 秒倒计时）','Auto-verify (5-second countdown)'),preference);
+      const quickHelp=node('p',data.autoEnabled?(data.candidates.length!==1?say('有多个候选，本次需手动选择并验证。','Multiple candidates require manual selection and verification.'):paused?say('本次已暂停，点击“恢复自动验证”继续。','Paused for this query. Choose Resume automatic verification to continue.'):say('可立即验证或暂停，恢复后重新完整倒计时。','Verify now or pause. Resuming starts a full countdown.')):say('当前为手动验证；开启后仅对唯一匹配码倒计时验证，并记住设置。','Manual verification is active. Enable the countdown for a unique matching code and remember this preference.'));quickHelp.id='mailAutoQuickHelp';quickHelp.className='help';
+      quick.onchange=async()=>{const enabled=quick.checked,previous=!!data.autoEnabled;quick.disabled=true;if(!enabled){if(current)current.autoEnabled=false;disarm();}try{await chrome.storage.local.set({mailAutoVerify:enabled});signature='';void tick();}catch{quick.checked=previous;if(current)current.autoEnabled=previous;setOutput('设置未能保存，请重试。');}finally{quick.disabled=false;}};
       if(manualMode){node('p',say('在上方输入验证码，邮箱候选仍会保留。','Enter the code above. The email candidate is retained.'));const back=node('button',say('返回候选验证码','Back to email candidate'));back.type='button';back.onclick=()=>{manualMode=false;signature='';mode();void tick();};return;}
       let chosen=data.candidates.find(c=>c.id===chosenCandidateId)||(data.candidates.length===1?data.candidates[0]:null);
       if(!chosen)node('p',say('找到多个候选，请选择与本次请求匹配的一项。','Multiple candidates found. Choose the one matching this request.'));

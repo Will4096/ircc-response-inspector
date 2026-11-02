@@ -29,6 +29,7 @@ function rawSection(title,records){
 }
 const expandedPeople=new Set();
 let currentContext={stage:'closed'};
+function historyUpdateText(update){if(!update)return t('未获取');const value=update.value;return /^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(value)?I18n.date(value):value;}
 function renderComparison(data){
   const box=$('updates');box.replaceChildren();box.hidden=false;
   const comparison=data.comparison;
@@ -36,10 +37,8 @@ function renderComparison(data){
   if(data.status!=='completed'){box.hidden=!['failed','partial','stopped'].includes(data.status);if(!box.hidden)box.append(el('span',t('本次查询未完成，未更新比较基准。'),'muted'));return;}
   const titles={first:t('首次记录，已建立下次对比基准'),changed:t('较上次查询有新变化'),unchanged:t('较上次查询无变化'),uncertain:t('部分数据无法比较'),unavailable:t('暂时无法比较')};
   box.append(el('strong',titles[comparison?.status] || t('尚无对比记录，下次完整查询后可比较')));
-  const official=data.application?.irccUpdatedAt||officialApplicationUpdate(data.responses,data.application?.number);
-  const updateValue=official?.value;
-  const formatted=updateValue&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(updateValue)?I18n.date(updateValue):updateValue;
-  box.append(el('div',t('IRCC 最后更新时间：')+(formatted||t('官网未返回')),'muted'));
+  const update=applicantsHistoryLastUpdate(data.applicants);
+  box.append(el('div',t('IRCC 最后更新（History）：')+historyUpdateText(update),'muted'));
   if(comparison?.previousAt)box.append(el('div',t('对比上次成功查询：')+I18n.date(comparison.previousAt),'muted'));
   if(comparison?.changes?.length){
     const list=el('ul',undefined,'change-list');
@@ -124,6 +123,7 @@ $('application').disabled=!!data.active || verificationBusy;$('queryFooter').hid
     for(const person of people){
       const changes=data.comparison?.people?.[person.id] || [];
       const tr=el('tr');const name=el('td');name.append(el('div',person.name,'person-name'),el('div',person.role==='PA'?t('主申请人'):person.role==='DEP'?t('家属申请人'):person.role || t('申请人'),'role'));
+      const historyUpdate=el('div',t('最后更新：')+historyUpdateText(historyLastUpdate(person.history)),'person-updated');historyUpdate.title=t('来自该申请人最新的 History 记录');name.append(historyUpdate);
       if(changes.length)name.append(el('span',t('有更新'),'change-badge'));
       if(person.status!=='completed')name.append(el('div',person.status==='capturing'?t('读取中'):person.status==='history'?t('读取历史记录'):person.status==='failed'?t('查询未完成'):t('等待查询'),'muted'));
       tr.append(name);
