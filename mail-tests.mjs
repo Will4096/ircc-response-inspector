@@ -119,7 +119,7 @@ assert.ok(manifest.optional_permissions.includes('nativeMessaging'));
 assert.ok(!manifest.permissions.includes('nativeMessaging'));
 assert.ok(!JSON.stringify(manifest).includes('mail.163.com'));
 assert.ok(manifest.content_scripts[0].js.includes('mail-content.js'));
-assert.ok((await read('background.js')).includes("message={...message,action:'verify',code:await mailTake(id,message)}"));
+
 // Gmail OAuth/HTTPS transport: fake provider replies, never a real Google connection.
 const gmail={enabled:true,provider:'gmail',email:'test@gmail.com',clientId:'synthetic-client.apps.googleusercontent.com'};
 let authorizedEmail=gmail.email,authCancelled=false;
@@ -142,3 +142,33 @@ const gmailResult=await context.mailPoll(7);assert.equal(gmailResult.candidates[
 assert.ok(!JSON.stringify(stored).includes('synthetic-token'));assert.ok(!JSON.stringify(persistent).includes('synthetic-token'));
 await context.mailForget();await assert.rejects(()=>context.mailMessages(gmail,{startedAt:time}),/mail.auth/);
 console.log('PASS: opt-in, strict matching, old/wrong-purpose/ambiguous/duplicate messages, retry after failure, worker restart deduplication, ignore, profile isolation, expired sessions, timeout and no plaintext secrets in storage.');
+// Auto verification is separate opt-in; only a visible view can own a five-second arm.
+persistent.mailAssist={enabled:true,provider:'163',email:'test@163.com'};persistent.selectedApplicationId='A';url='https://ircc-services.canada.ca/2/ast-otp-verification';
+await context.mailTrack(7,'TESTA');mailbox=[{...good,receivedAt:time+100}];time+=100;
+let automatic=await context.mailPoll(7);assert.equal(automatic.autoEnabled,false);
+let control={requestId:automatic.requestId,profileId:'A',candidateId:'one',viewId:'view-1'};
+await assert.rejects(()=>context.mailAutoControl(7,{...control,action:'mailAutoArm'}),/mail.stale/);
+persistent.mailAutoVerify=true;
+let arm=await context.mailAutoControl(7,{...control,action:'mailAutoArm'});assert.equal(arm.auto.deadline,time+5000);
+await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
+time+=2000;await context.mailAutoControl(7,{...control,action:'mailAutoPause'});
+assert.equal((await context.mailPoll(7)).autoPaused,true);assert.equal(persistent['mailPending:A'].autoPaused,true);
+vm.runInContext('mailRequests.clear();mailSecrets.clear()',context);automatic=await context.mailPoll(7);
+assert.equal(automatic.autoPaused,true,'Pause survives reopening / worker restart');
+await context.mailAutoControl(7,{...control,action:'mailAutoResume'});
+arm=await context.mailAutoControl(7,{...control,action:'mailAutoArm'});assert.equal(arm.auto.deadline,time+5000,'Resume always starts a complete countdown');
+time+=5000;
+await assert.rejects(()=>context.mailAutoControl(7,{...control,viewId:'other-view',autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
+assert.equal(await context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),'123456');
+assert.equal(persistent['mailPending:A'].autoPaused,true,'A submitted code cannot start another automatic attempt');
+await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
+assert.ok(!JSON.stringify(persistent['mailPending:A']).includes('123456'));
+await context.mailTrack(7,'TESTA');mailbox=[{...good,receivedAt:time+100},{...good,id:'two',receivedAt:time+100,text:'Your verification code is 654321.'}];time+=100;
+automatic=await context.mailPoll(7);control={...control,requestId:automatic.requestId};
+await assert.rejects(()=>context.mailAutoControl(7,{...control,action:'mailAutoArm'}),/mail.stale/);
+await context.mailTrack(7,'TESTA');mailbox=[{...good,receivedAt:time+100}];time+=100;automatic=await context.mailPoll(7);control={...control,requestId:automatic.requestId};
+arm=await context.mailAutoControl(7,{...control,action:'mailAutoArm'});await context.mailAutoControl(7,{...control,action:'mailAutoDisarm'});time+=5000;
+await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
+arm=await context.mailAutoControl(7,{...control,action:'mailAutoArm',reset:true});time+=5000;persistent.mailAutoVerify=false;
+await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
+console.log('PASS: auto verification default-off, five-second arm, persistent pause, full restart, unique candidate, owner isolation, disarm, duplicate prevention and no saved codes.');

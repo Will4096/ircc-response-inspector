@@ -36,6 +36,10 @@ function renderComparison(data){
   if(data.status!=='completed'){box.hidden=!['failed','partial','stopped'].includes(data.status);if(!box.hidden)box.append(el('span',t('本次查询未完成，未更新比较基准。'),'muted'));return;}
   const titles={first:t('首次记录，已建立下次对比基准'),changed:t('较上次查询有新变化'),unchanged:t('较上次查询无变化'),uncertain:t('部分数据无法比较'),unavailable:t('暂时无法比较')};
   box.append(el('strong',titles[comparison?.status] || t('尚无对比记录，下次完整查询后可比较')));
+  const official=data.application?.irccUpdatedAt||officialApplicationUpdate(data.responses,data.application?.number);
+  const updateValue=official?.value;
+  const formatted=updateValue&&/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:?\d{2})$/.test(updateValue)?I18n.date(updateValue):updateValue;
+  box.append(el('div',t('IRCC 最后更新时间：')+(formatted||t('官网未返回')),'muted'));
   if(comparison?.previousAt)box.append(el('div',t('对比上次成功查询：')+I18n.date(comparison.previousAt),'muted'));
   if(comparison?.changes?.length){
     const list=el('ul',undefined,'change-list');

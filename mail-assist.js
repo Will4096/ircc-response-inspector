@@ -166,7 +166,9 @@ async function mailPoll(tabId,options={}){
     request.deadline=Date.now()+MAIL_WINDOW;await mailRemember(request,'waiting');await chrome.storage.session.set({['mail:request:'+tabId]:request});
   }
   const secrets=mailSecrets.get(tabId);
-  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',requestedAt:request.startedAt,checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:secrets.error==='mail.helper'?{reason:mailNativeStatus?.reason}:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
+  const autoEnabled=(await chrome.storage.local.get('mailAutoVerify')).mailAutoVerify===true;
+  if(!autoEnabled)delete secrets.auto;
+  const display=()=>({status:secrets.candidates.length?'candidates':secrets.error || 'waiting',autoEnabled,autoPaused:!!request.autoPaused,auto:secrets.auto?{...secrets.auto}:null,requestedAt:request.startedAt,checkedAt:secrets.checkedAt||null,helper:secrets.error==='mail.version'?mailNativeObserved:secrets.error==='mail.helper'?{reason:mailNativeStatus?.reason}:undefined,diagnostic:secrets.diagnostic,requestId:request.id,profileId:request.profileId,candidates:secrets.candidates.map(({id,code,receivedAt,purpose})=>({id,code,receivedAt,purpose}))});
   if(secrets.candidates.length)return display(); // Waiting for confirmation is not a new fetch demand.
   if(!options.manual&&secrets.lastPoll && Date.now()-secrets.lastPoll<10000)return display();
   mailPollLocks.add(tabId);secrets.lastPoll=Date.now();
@@ -206,9 +208,29 @@ async function mailTake(tabId,message){
   if(!await mailContext(tabId,request) || request.id!==message.requestId || request.profileId!==message.profileId)throw new Error('mail.stale');
   const candidate=secrets?.candidates.find(c=>c.id===message.candidateId);
   if(!candidate)throw new Error('mail.stale');
+  request.autoPaused=true;delete secrets.auto;
   // Mark consumed BEFORE submission, including preparation errors. Never repeat automatically.
   secrets.excluded.add(candidate.code);secrets.candidates=[];
   await mailExclude(tabId,request,[candidate]);return candidate.code;
+}
+async function mailAutoControl(tabId,message){
+  const request=mailRequests.get(tabId),secrets=mailSecrets.get(tabId);
+  if(!await mailContext(tabId,request)||request.id!==message.requestId||request.profileId!==message.profileId)throw Error('mail.stale');
+  if(message.action==='mailAutoPause'||message.action==='mailAutoResume'){
+    request.autoPaused=message.action==='mailAutoPause';delete secrets.auto;
+    await mailRemember(request,secrets.candidates.length?'candidate':'waiting');
+    await chrome.storage.session.set({['mail:request:'+tabId]:request});return {ok:true};
+  }
+  if(message.action==='mailAutoDisarm'){delete secrets.auto;return {ok:true};}
+  if(!(await chrome.storage.local.get('mailAutoVerify')).mailAutoVerify||request.autoPaused||secrets.candidates.length!==1||secrets.candidates[0].id!==message.candidateId)throw Error('mail.stale');
+  if(typeof message.viewId!=='string'||!message.viewId||message.viewId.length>100)throw Error('mail.stale');
+  if(message.action==='mailAutoArm'){
+    if(message.reset===true||!secrets.auto||secrets.auto.viewId!==message.viewId||secrets.auto.candidateId!==message.candidateId)secrets.auto={id:crypto.randomUUID(),viewId:message.viewId,candidateId:message.candidateId,deadline:Date.now()+5000};
+    return {auto:{...secrets.auto}};
+  }
+  const auto=secrets.auto;
+  if(!auto||auto.used||auto.id!==message.autoId||auto.viewId!==message.viewId||Date.now()<auto.deadline||Date.now()>auto.deadline+2000)throw Error('mail.stale');
+  auto.used=true;return mailTake(tabId,message);
 }
 async function mailHandle(message,sender){
   if(!String(message.action).startsWith('mail'))return undefined;
@@ -253,6 +275,7 @@ async function mailHandle(message,sender){
     }
   }
   if(!tracker && !extension)throw new Error('mail.permission');
+  if(['mailAutoArm','mailAutoPause','mailAutoResume','mailAutoDisarm'].includes(message.action)){if(!extension)throw Error('mail.permission');return mailAutoControl(tabId,message);}
   if(message.action==='mailTrackRequest'){
     if(!tracker || new URL(sender.url).pathname!=='/2/ast-search')throw new Error('mail.permission');
     return mailTrack(tabId,message.applicationNumber);
@@ -266,7 +289,7 @@ async function mailHandle(message,sender){
   if(message.action==='mailCheck'){if(!extension)throw Error('mail.permission');return mailPoll(tabId,{manual:true,resume:true});}
   if(message.action==='mailIgnore'){
     const req=mailRequests.get(tabId);if(!await mailContext(tabId,req) || req.id!==message.requestId)throw new Error('mail.stale');
-    const s=mailSecrets.get(tabId);const candidates=s?.candidates || [];for(const c of candidates)s.excluded.add(c.code);if(s)s.candidates=[];
+    const s=mailSecrets.get(tabId);const candidates=s?.candidates || [];for(const c of candidates)s.excluded.add(c.code);if(s){s.candidates=[];delete s.auto;}
     await mailExclude(tabId,req,candidates);return {ok:true};
   }
   if(message.action==='mailCancel'){await mailCancel(tabId,undefined,'cancelled');return {ok:true};}

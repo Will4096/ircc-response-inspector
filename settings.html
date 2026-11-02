@@ -7,7 +7,7 @@
 <section class="panel mail-panel" aria-labelledby="mailHeading">
 <div class="panel-header"><div><h2 id="mailHeading" data-i18n="邮箱验证码辅助">邮箱验证码辅助</h2></div><span id="mailState" class="badge" role="status"></span></div>
 <div class="setting-row"><div><h3 data-i18n="启用邮箱辅助">启用邮箱辅助</h3><p id="mailStateHelp" class="help"></p></div><label class="toggle"><input id="mailEnabled" type="checkbox" role="switch"><span data-i18n="邮箱辅助">邮箱辅助</span></label></div>
-<div id="mailConfig" class="mail-config" hidden>
+<div class="setting-row"><div><h3 data-i18n="获取验证码后自动验证">获取验证码后自动验证</h3><p class="help" data-i18n="找到本次查询的唯一验证码后，倒计时 5 秒验证。可立即验证或暂停；默认关闭。">找到本次查询的唯一验证码后，倒计时 5 秒验证。可立即验证或暂停；默认关闭。</p></div><label class="toggle"><input id="mailAutoVerify" type="checkbox" role="switch"><span data-i18n="自动验证">自动验证</span></label></div><div id="mailConfig" class="mail-config" hidden>
 <div class="mail-section-heading"><h3 data-i18n="邮箱连接">邮箱连接</h3><button id="mailEditConnection" class="link-button" type="button" hidden data-i18n="更换邮箱">更换邮箱</button></div>
 <div class="field-grid"><label><span data-i18n="邮箱类型">邮箱类型</span><select id="mailProvider"><option value="163">163</option><option value="gmail">Gmail</option></select></label><label><span data-i18n="接收验证码的邮箱">接收验证码的邮箱</span><input id="mailEmail" type="email" autocomplete="off" placeholder="name@example.com"></label></div>
 <div id="neteaseSettings" hidden>

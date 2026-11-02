@@ -26,7 +26,9 @@ function readOverview(){
   const heading=compact(document.querySelector('h1')?.textContent);
   const number=body.match(/Application number:\s*([A-Z0-9]+)/i)?.[1] || '';
   const status=Array.from(document.querySelectorAll('h2')).map(element=>compact(element.textContent)).find(text=>/^Application status:/i.test(text))?.replace(/^Application status:\s*/i,'') || '';
-  return {application:{number,title:heading,status},applicants};
+  const overview=compact((document.querySelector('main')||document.body).innerText);
+  const update=overview.match(/(?:Last updated|Application last updated|Updated|Dernière mise à jour|Mis à jour le)\s*[:：]?\s*(\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?|[A-Za-zÀ-ÿ]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})/i)?.[1];
+  return {application:{number,title:heading,status,...(update?{irccUpdatedAt:{value:update,source:'Tracker page'}}:{})},applicants};
 }
 function readApplicant(){
   const compact=text=>(text || '').replace(/\s+/g,' ').trim();

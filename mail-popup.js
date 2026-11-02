@@ -4,6 +4,48 @@
   box.setAttribute('role','status');box.setAttribute('aria-live','polite');
   document.getElementById('verifyForm').after(box);let signature='',busy=false,sending=false,resumeOnEnter=true,manualNext=false;
   const say=(zh,en)=>I18n.language==='en'?en:zh;
+  let current=null,manualMode=false,localPaused=null,autoBusy=false,lastArm=null,needsFreshCountdown=true,chosenCandidateId=null;
+  const viewId=globalThis.crypto.randomUUID();
+  const visible=()=>document.visibilityState!=='hidden'&&(typeof workspaceVisible==='undefined'||workspaceVisible)&&currentContext.stage==='verification'&&!displayedCapture?.active;
+  function mode(){document.documentElement.dataset.mailMode=current?.status==='candidates'&&!manualMode?'candidate':'';}
+  async function pause(useManual=false){
+    if(useManual)manualMode=true;
+    if(current?.requestId){localPaused=current.requestId;lastArm=null;current.auto=null;current.autoPaused=true;await send('mailAutoPause',{requestId:current.requestId});}
+    signature='';mode();void tick();
+  }
+  function disarm(){
+    needsFreshCountdown=true;lastArm=null;
+    if(current?.auto){current.auto=null;void send('mailAutoDisarm',{requestId:current.requestId}).catch(()=>{});}
+  }
+  async function submitCandidate(data,candidate,automatic=false){
+    if(sending||!candidate||!visible())return;
+    sending=true;verificationBusy=true;localPaused=data.requestId;
+    for(const b of box.querySelectorAll('button,input'))b.disabled=true;
+    const title=box.querySelector('strong');if(title)title.textContent=say('正在验证，成功后继续查询','Verifying; progress checking follows');
+    document.getElementById('code').value='';renderContext(currentContext,displayedCapture||{});
+    try{await send(automatic?'mailAutoCommit':'mailConfirm',{requestId:data.requestId,candidateId:candidate.id,autoId:lastArm?.id,viewId});}
+    catch{setOutput('验证未完成，请检查验证码后重试。');void send('mailAutoPause',{requestId:data.requestId}).catch(()=>{});}
+    finally{sending=false;verificationBusy=false;lastArm=null;signature='';lastSnapshot='';await refreshCapture().catch(()=>{});void tick();}
+  }
+  async function autoTick(){
+    if(!visible()){disarm();return;}
+    const data=current;
+    if(!data||data.status!=='candidates'||data.candidates.length!==1||!data.autoEnabled||data.autoPaused||localPaused===data.requestId||manualMode||sending||autoBusy||data.profileId&&data.profileId!==document.getElementById('application').value)return;
+    autoBusy=true;
+    try{
+      if(!lastArm||needsFreshCountdown){
+        const reply=await send('mailAutoArm',{requestId:data.requestId,candidateId:data.candidates[0].id,viewId,reset:needsFreshCountdown});
+        if(current?.requestId!==data.requestId||!visible())return;
+        lastArm=reply.auto;needsFreshCountdown=false;data.auto=lastArm;signature='';void tick();
+      }else{
+        const title=box.querySelector('[data-auto-countdown]');
+        const label=say('将在 ','Verifying in ')+Math.max(0,Math.ceil((lastArm.deadline-Date.now())/1000))+say(' 秒后自动验证',' seconds');
+        if(title&&title.textContent!==label)title.textContent=label;
+        if(lastArm.deadline<=Date.now())await submitCandidate(data,data.candidates[0],true);
+      }
+    }catch{localPaused=data.requestId;lastArm=null;void send('mailAutoPause',{requestId:data.requestId}).catch(()=>{});signature='';}
+    finally{autoBusy=false;}
+  }
   const labels={
     paused:['本次自动检查已暂停','Automatic checking paused','提交记录已保留。点击检查本次邮件即可继续，无需重新提交查询。','The submission record is saved. Check this request’s email to continue without resubmitting the query.'],
     expired:['自动收码等待已结束','Automatic retrieval wait ended','已停止检查邮箱，这不代表验证码已过期。可粘贴已收到的验证码；也可返回 Tracker 重新查询。','Mailbox checks have stopped; this does not mean the code has expired. Paste the code you received, or restart the Tracker query.'],
@@ -18,16 +60,19 @@
   };
   function node(tag,text,parent=box){const e=document.createElement(tag);if(text)e.textContent=text;parent.append(e);return e;}
   async function tick(){
-    if(typeof workspaceVisible!=='undefined'&&!workspaceVisible){resumeOnEnter=true;return;}
+    if(document.visibilityState==='hidden'||typeof workspaceVisible!=='undefined'&&!workspaceVisible){resumeOnEnter=true;disarm();return;}
     if(busy || sending || typeof targetTabId==='undefined' || !targetTabId)return;
-    if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';resumeOnEnter=true;return;}
+    if(currentContext.stage!=='verification' || displayedCapture?.active){box.hidden=true;signature='';resumeOnEnter=true;current=null;mode();disarm();return;}
     busy=true;
     try{
       if(!signature){box.hidden=false;box.replaceChildren();const title=node('strong',say('正在检查邮箱辅助…','Checking email assistance…'));title.className='mail-loading';}
       const manual=manualNext,resume=resumeOnEnter;manualNext=false;resumeOnEnter=false;
       const data=await send(manual?'mailCheck':'mailPoll',{resume});
-      if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';return;}
-      const key=JSON.stringify([data,I18n.language]);if(key===signature)return;signature=key;
+      if(data.profileId && data.profileId!==document.getElementById('application').value){box.hidden=true;signature='';current=null;mode();disarm();return;}
+      if(current?.requestId!==data.requestId){manualMode=!!document.getElementById('code').value;localPaused=null;lastArm=null;needsFreshCountdown=true;chosenCandidateId=null;}
+      current=data;mode();
+      if(manualMode&&data.requestId&&localPaused!==data.requestId){localPaused=data.requestId;void send('mailAutoPause',{requestId:data.requestId}).catch(()=>{});}
+      const key=JSON.stringify([data,I18n.language,manualMode,localPaused]);if(key===signature)return;signature=key;
       box.replaceChildren();box.hidden=data.status==='off';if(box.hidden)return;
       if(data.status!=='candidates'){
         const text=labels[data.status] || labels['mail.network'];
@@ -47,30 +92,35 @@
         if(data.status==='mail.helper'&&data.helper?.reason)node('small','Chrome: '+data.helper.reason);
         return;
       }
-      node('strong',say('核对邮箱验证码','Review email verification code'));
+      const paused=data.autoPaused||localPaused===data.requestId;
+      const countdown=data.autoEnabled&&!paused&&data.candidates.length===1&&!manualMode;
+      const title=node('strong',manualMode?say('已切换手动输入','Manual entry selected'):countdown?say('准备自动验证…','Preparing automatic verification…'):data.autoEnabled&&paused?say('自动验证已暂停','Automatic verification paused'):say('核对邮箱验证码','Review email verification code'));
+      if(countdown)title.dataset.autoCountdown='1';
       node('p',say('目标申请：','Target profile: ')+(document.getElementById('application').selectedOptions[0]?.textContent || ''));
-      let chosen=data.candidates.length===1?data.candidates[0]:null;
+      if(manualMode){node('p',say('在上方输入验证码，邮箱候选仍会保留。','Enter the code above. The email candidate is retained.'));const back=node('button',say('返回候选验证码','Back to email candidate'));back.type='button';back.onclick=()=>{manualMode=false;signature='';mode();void tick();};return;}
+      let chosen=data.candidates.find(c=>c.id===chosenCandidateId)||(data.candidates.length===1?data.candidates[0]:null);
       if(!chosen)node('p',say('找到多个候选，请选择与本次请求匹配的一项。','Multiple candidates found. Choose the one matching this request.'));
-      const confirm=document.createElement('button');confirm.type='button';confirm.className='primary';confirm.textContent=say('验证并查询','Verify and check');confirm.disabled=!chosen;
+      const confirm=document.createElement('button');confirm.type='button';confirm.className='primary';confirm.textContent=say('立即验证','Verify now');confirm.disabled=!chosen;
       for(const c of data.candidates){
         const row=node('div');row.className='mail-candidate';
-        if(data.candidates.length>1){const label=node('label',undefined,row),radio=document.createElement('input');radio.type='radio';radio.name='mailCandidate';radio.style.marginRight='8px';radio.onchange=()=>{chosen=c;confirm.disabled=false;};label.append(radio);node('code',c.code,label);}
+        if(data.candidates.length>1){const label=node('label',undefined,row),radio=document.createElement('input');radio.type='radio';radio.name='mailCandidate';radio.checked=chosen?.id===c.id;radio.style.marginRight='8px';radio.onchange=()=>{chosen=c;chosenCandidateId=c.id;confirm.disabled=false;};label.append(radio);node('code',c.code,label);}
         else node('code',c.code,row);
         node('small',c.purpose==='TrackerAccountConfirmation'?say('邮件类型：IRCC 账号确认（Tracker 使用的通用模板）','Message type: IRCC account confirmation (shared Tracker template)'):say('用途：Tracker 查询验证','Purpose: Tracker verification'),row);
         node('small',say('收信时间：','Received: ')+I18n.date(c.receivedAt),row);
       }
-      node('p',say('请确认目标申请和邮件用途，再提交验证码。','Confirm the target profile and message purpose before submitting.'));
+      node('p',countdown?say('倒计时结束后自动验证，可立即验证或暂停。','Verification starts after the countdown. Verify now or pause at any time.'):say('核对目标申请和邮件用途后，点击立即验证。','Check the target profile and email purpose, then choose Verify now.'));
       box.append(confirm);
-      confirm.onclick=async()=>{
-        if(!chosen || sending)return;sending=true;verificationBusy=true;for(const b of box.querySelectorAll('button,input'))b.disabled=true;
-        document.getElementById('code').value='';renderContext(currentContext,displayedCapture || {});
-        try{await send('mailConfirm',{requestId:data.requestId,candidateId:chosen.id});}
-        catch{setOutput('验证未完成，请检查验证码后重试。');}
-        finally{sending=false;verificationBusy=false;signature='';lastSnapshot='';await refreshCapture().catch(()=>{});void tick();}
-      };
+      confirm.onclick=()=>void submitCandidate(data,chosen);
+      if(data.autoEnabled&&data.candidates.length===1){const toggle=node('button',paused?say('恢复自动验证','Resume automatic verification'):say('暂停自动验证','Pause automatic verification'));toggle.type='button';toggle.onclick=()=>void(async()=>{if(sending)return;if(!paused){await pause();return;}await send('mailAutoResume',{requestId:data.requestId});localPaused=null;lastArm=null;needsFreshCountdown=true;signature='';void tick();})().catch(()=>setOutput('验证未完成，请检查验证码后重试。'));}
+      const manualButton=node('button',say('改为手动输入','Enter manually'));manualButton.type='button';manualButton.className='link-button';manualButton.onclick=()=>void pause(true).catch(()=>{manualMode=true;mode();});
       const ignore=node('button',say('忽略本次候选','Ignore candidates'));ignore.type='button';ignore.onclick=async()=>{if(sending)return;try{await send('mailIgnore',{requestId:data.requestId});}catch{setOutput('验证未完成，请检查验证码后重试。');}finally{signature='';void tick();}};
-    }catch{signature='';box.hidden=false;box.replaceChildren();node('p',say('邮箱辅助暂不可用，仍可手动输入验证码。','Email assistance is unavailable. You can still enter the code manually.'));}
+    }catch{if(current?.requestId){localPaused=current.requestId;void send('mailAutoPause',{requestId:current.requestId}).catch(()=>{});}disarm();current=null;mode();signature='';box.hidden=false;box.replaceChildren();node('p',say('邮箱辅助暂不可用，仍可手动输入验证码。','Email assistance is unavailable. You can still enter the code manually.'));}
     finally{busy=false;}
   }
   setInterval(tick,1500);void tick();I18n.onChange(()=>{signature='';void tick();});
+  setInterval(()=>void autoTick(),200);
+  document.getElementById('code').addEventListener('input',()=>void pause(true).catch(()=>{}));
+  document.addEventListener('visibilitychange',()=>{if(!visible())disarm();});
+  window.addEventListener('pagehide',disarm);
+  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.mailAutoVerify){if(current)current.autoEnabled=changes.mailAutoVerify.newValue===true;disarm();signature='';void tick();}});
 })();

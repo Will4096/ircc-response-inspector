@@ -186,7 +186,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {cancelled:true,message:/[\u3400-\u9fff]/.test(error.message)?error.message:'自动提交结果尚未确认，请查看官网提示，不会自动重复提交。'};
       }
     }
-    if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm'].includes(message.action))throw Error('backup.busy');
+    if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
     if(message.action==='restoreBackup'){
       if(!mailExtensionSender(sender))throw Error('backup.permission');
       const data=Backup.clean(message.data);
@@ -227,9 +227,11 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       await rememberTrackerTab(target);
       return {ok:true,tabId:target.id};
     }
-    if(message.action==='mailConfirm'){
+    if(message.action==='mailConfirm'||message.action==='mailAutoCommit'){
       if(!mailExtensionSender(sender) && !mailTrackerSender(sender))throw new Error('mail.permission');
-      message={...message,action:'verify',code:await mailTake(id,message)};
+      if(message.action==='mailAutoCommit'&&!mailExtensionSender(sender))throw Error('mail.permission');
+      const code=message.action==='mailAutoCommit'?await mailAutoControl(id,message):await mailTake(id,message);
+      message={...message,action:'verify',code};
     }else if(message.action==='mailTrackRequest'&&mailTrackerSender(sender)&&new URL(sender.url).pathname==='/2/ast-search'){
       const cancellation=cancelSearchSubmit(id),tracking=mailHandle(message,sender);await cancellation;return tracking;
     }else if(String(message.action).startsWith('mail'))return mailHandle(message,sender);

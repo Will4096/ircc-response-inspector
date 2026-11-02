@@ -1,4 +1,26 @@
 var TrackerAuthOrigins=['https://gc.auth.canada.ca/*','https://clegc-gckey.gc.ca/*'];
+// Application-level official update metadata only; never infer it from History or capture time.
+function officialApplicationUpdate(responses,number){
+  const normalize=value=>String(value||'').replace(/[^a-z0-9]/gi,'').toUpperCase();
+  const target=normalize(number);if(!target)return null;
+  const keys=/^(lastupdated|lastupdateddate|lastupdateddatetime|lastupdate|lastupdatedon|lastupdatedat|lastupdatedtime|lastupdatedtimestamp|lastupdatedate|lastdateupdated|lastmodified|lastmodifieddate|lastmodifiedat|applicationlastupdated|applicationupdatedat)$/i;
+  const officialDate=value=>{
+    if(typeof value==='number'&&Number.isFinite(value)){const time=value<1e12?value*1000:value;if(time>=946684800000&&time<=Date.now()+86400000)return new Date(time).toISOString();return null;}
+    return typeof value==='string'&&value.length<=80&&/\d{4}/.test(value)&&Number.isFinite(Date.parse(value))?value:null;
+  };
+  function walk(input,owner=false,depth=0){
+    const value=decodeJson(input);if(depth>20||!value||typeof value!=='object')return null;
+    if(Array.isArray(value)){for(const child of value.slice(0,100)){const result=walk(child,owner,depth+1);if(result)return result;}return null;}
+    if(Object.keys(value).some(k=>/^relation_?id$/i.test(k)))return null;
+    const appNumber=value.applicationNumber??value.application_number??value.application?.number??(typeof value.number==='string'&&/[a-z]/i.test(value.number)?value.number:undefined);
+    if(appNumber!==undefined){if(normalize(appNumber)!==target)return null;owner=true;}
+    if(owner)for(const [key,date] of Object.entries(value)){const parsed=keys.test(key.replace(/_/g,''))?officialDate(date):null;if(parsed)return {value:parsed,source:'IRCC response',field:key};}
+    for(const [key,child] of Object.entries(value)){if(/history|activities|timeline|events|applicants|people|milestones|checks|actions|documents/i.test(key))continue;const result=walk(child,owner,depth+1);if(result)return result;}
+    return null;
+  }
+  for(const response of [...(responses||[])].reverse()){const result=walk(response.json);if(result)return result;}
+  return null;
+}
 const CHECK_KEYS=['biometrics','medical','eligibility','background'];
 function checkValue(value){
   if(value===null || value===undefined || typeof value==='object')return undefined;
