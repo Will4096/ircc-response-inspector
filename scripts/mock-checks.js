@@ -91,13 +91,13 @@
     w=await load('/workspace.html?surface=panel&mail=connected&stage=login');await settle();await settle();
     const loginWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow,loginDoc=loginWindow.document,entries=[];let newTabs=0;const originalSend=w.chrome.runtime.sendMessage;
     w.chrome.tabs.create=async()=>{newTabs++;return {id:99};};w.chrome.runtime.sendMessage=async message=>{if(message.action==='openTrackerPage'){entries.push({tabId:message.tabId,resume:message.resume});return {ok:true,tabId:1};}return originalSend(message);};
-    assert(!loginDoc.getElementById('reloginTracker').hidden&&loginDoc.getElementById('openTracker').textContent==='继续登录','authentication stage offers continue and restart separately');
+    assert(!loginDoc.getElementById('reloginTracker').hidden&&loginDoc.getElementById('openTracker').textContent==='前往登录页','authentication stage offers continue and restart separately');
     await loginDoc.getElementById('openTracker').onclick();await loginDoc.getElementById('reloginTracker').onclick();
     assert(entries.length===2&&entries[0].resume===true&&entries[1].resume===false&&entries.every(e=>e.tabId===1)&&newTabs===0,'continue and restart target the existing Tracker tab');
     assert(loginDoc.getElementById('application').value==='demo-a','relogin retains the selected profile');
     w=await load('/workspace.html?surface=panel&stage=expired');await settle();await settle();
     const expired=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
-    assert(expired.getElementById('openTracker').textContent==='重新登录 Tracker'&&expired.getElementById('reloginTracker').hidden&&expired.getElementById('verifyForm').hidden,'expired session has one clear recovery action');
+    assert(expired.getElementById('openTracker').textContent==='重新开始登录'&&expired.getElementById('reloginTracker').hidden&&expired.getElementById('verifyForm').hidden,'expired session has one clear recovery action');
     w=await load('/workspace.html?surface=panel&auth=hidden');await settle();await settle();
     const opaqueWindow=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow,opaque=opaqueWindow.document;let authTabs=0;const grants=[];const request=w.chrome.permissions.request;
     w.chrome.tabs.create=async()=>{authTabs++;return {id:99};};w.chrome.permissions.request=async value=>{grants.push(value);return request(value);};
@@ -152,6 +152,10 @@
     assert(card.textContent.includes('Verifying in')&&mailWindow.document.documentElement.scrollWidth===mailWindow.document.documentElement.clientWidth,'English verification countdown fits narrow side panel');
     [...card.querySelectorAll('button')].find(b=>b.textContent==='Pause automatic verification').click();await new Promise(r=>setTimeout(r,1700));
     assert(card.textContent.includes('Automatic verification paused'),'English paused verification presents clear recovery actions');
+    w=await load('/workspace.html?surface=panel&stage=expired&lang=en');await settle();await settle();
+    const authEnglish=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
+    assert(authEnglish.getElementById('openTracker').textContent==='Restart sign-in'&&authEnglish.getElementById('reloginTracker').hidden&&authEnglish.documentElement.scrollWidth===authEnglish.documentElement.clientWidth,'English invalid session shows one clear restart action without overflow');
+    w=await load('/workspace.html?surface=panel&stage=login');await settle();await settle();
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

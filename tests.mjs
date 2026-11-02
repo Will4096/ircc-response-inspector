@@ -75,6 +75,13 @@ async function harness(saved){
   await h.sendExtension({action:'openTrackerPage',windowId:1,resume:false},sender);
   assert.equal(created.length,0);assert.equal(updates[0].id,17);assert.equal(updates[0].url,'https://ircc-services.canada.ca/2/ast');
   current.url='https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic-expired';
+  api.scripting={executeScript:async request=>{assert.equal(request.func.name,'readTrackerSessionState');return [{result:{expired:true}}];}};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'expired','Authentication Invalid session signal routes to restart-only state');
+  api.scripting.executeScript=async()=>[{result:{expired:false}}];
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  let deniedReads=0;api.permissions.contains=async()=>false;api.scripting.executeScript=async()=>{deniedReads++;throw Error('Must not inspect auth headings without access');};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  assert.equal(deniedReads,0);api.permissions.contains=async()=>true;
   await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:true},sender);assert.equal(updates[1].url,undefined,'Continue does not reset a valid login');
   await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(updates[2].url,'https://ircc-services.canada.ca/2/ast','Restart never reuses an expired authentication request');
   assert.equal(created.length,0);assert.ok(!JSON.stringify(db).includes('synthetic-expired'),'No authentication URLs or parameters persisted');

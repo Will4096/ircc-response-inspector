@@ -4,8 +4,8 @@ var UIModel={
     const state={step:1,title:'开始查询',help:'选择申请后，打开 Tracker 完成登录。',label:'待开始',open:false,fill:false,verify:false,capture:false,stop:false,add:!hasProfile,openText:'打开 Tracker'};
     if(!hasProfile)return {...state,step:0,title:'先添加一份申请资料',help:'保存 Tracker 查询需要的信息，之后可重复使用。',label:'首次使用'};
     if(stage==='access')return {...state,title:'先关联当前 Tracker 登录页',help:'Chrome 尚未允许识别认证页地址。允许后将关联原标签页，不读取登录表单。',label:'需要页面授权',open:true,newTab:true,openText:'识别当前登录页'};
-    if(stage==='expired')return {...state,title:'Tracker 登录已超时',help:'在原 Tracker 标签页重新登录，所选申请和上次结果会保留。',label:'登录超时',open:true,openText:'重新登录 Tracker'};
-    if(stage==='login')return {...state,title:'在当前 Tracker 标签页完成登录',help:'继续当前登录；若已超时，点击重新登录。不会新建标签页。',label:'需要登录',open:true,relogin:true,openText:'继续登录'};
+    if(stage==='expired')return {...state,title:'登录会话已失效',help:'官网提示当前登录已失效，请重新开始登录。申请资料和查询记录会保留。',label:'需要重新登录',open:true,openText:'重新开始登录'};
+    if(stage==='login')return {...state,title:'请在官网完成登录',help:'在 Tracker 官网选择登录方式并完成登录。若页面提示会话失效，可重新开始登录。',label:'待登录',open:true,relogin:true,openText:'前往登录页'};
     if(stage==='form'&&data.autoSubmit)return {...state,step:2,title:'资料已填写',help:'倒计时结束后提交查询；取消后可在官网手动提交。',label:'等待提交'};
     if(stage==='form'&&['submitted','submitting'].includes(data.status))return {...state,step:2,title:'查询已提交，等待官网响应',help:'进入验证码页后继续。若官网仍有校验提示，请在原页面处理。',label:'已提交',open:true,openText:'查看官网提示'};
     if(data.active)return {...state,step:data.status==='filling'?2:4,title:data.status==='filling'?'正在填写申请资料':'正在验证或读取申请进度',help:'请保留 Tracker 页面，完成后会显示本次结果和变化。',label:'处理中',stop:true};

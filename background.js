@@ -252,13 +252,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if(message.action==='getContext'){
       let tab;try{tab=await chrome.tabs.get(id);}catch{return {stage:'closed'};}
       await rememberTrackerTab(tab);
-      if(!tab.url&&tab.windowId!==undefined){const saved=(await chrome.storage.session.get('tracker:window:'+tab.windowId))['tracker:window:'+tab.windowId];if(saved?.tabId===id){if(mailRequests.has(id))await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'login',tabId:id};}}
+      if(!tab.url&&tab.windowId!==undefined){const saved=(await chrome.storage.session.get('tracker:window:'+tab.windowId))['tracker:window:'+tab.windowId];if(saved?.tabId===id){if(mailRequests.has(id))await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','登录状态已变化，请在官网完成登录。');return {stage:'login',tabId:id};}}
       if(!tab.url||(!trackerRelevant(tab.url)&&!await trackerAuthAccess()))return {stage:'access',tabId:id};
       let url;try{url=new URL(tab.url);}catch{return {stage:'closed'};}
       if(['gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(url.hostname)){
+        let expired=false;
+        if(tab.status!=='loading'&&await trackerAuthAccess()&&chrome.scripting?.executeScript)try{const result=await chrome.scripting.executeScript({target:{tabId:id},func:readTrackerSessionState});expired=result[0]?.result?.expired===true;}catch{}
         if(mailRequests.has(id))await mailCancel(id);
-        if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');
-        return {stage:'login',tabId:id};
+        if(sessions.get(id)?.active)await finish(id,'failed',expired?'Tracker 登录已超时，请重新登录。':'登录状态已变化，请在官网完成登录。');
+        return {stage:expired?'expired':'login',tabId:id};
       }
       const stages={'/2/ast':'role','/2/ast-search':'form','/2/ast-otp-verification':'verification','/2/ast-details':'results','/2/ast-view-application':'results','/2/ast-history':'results'};
       let expired=false;

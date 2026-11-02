@@ -11,4 +11,6 @@ vm.runInContext(await fs.readFile(new URL('scanner.js',import.meta.url),'utf8'),
 c.location.origin='https://ircc-services.canada.ca';c.document.body={innerText:'Your session has expired. Please sign in again.'};assert.equal(c.readTrackerSessionState().expired,true);
 c.document.body.innerText='Your application is in progress. Sessions may expire after inactivity.';assert.equal(c.readTrackerSessionState().expired,false);
 c.location.origin='https://gc.auth.canada.ca';Object.defineProperty(c.document,'body',{get(){throw Error('Do not inspect authentication page content');}});assert.equal(c.readTrackerSessionState().expired,false);
+ c.document.querySelectorAll=()=>[{textContent:'Invalid session'}];assert.equal(c.readTrackerSessionState().expired,true,'Explicit authentication heading is recognized without reading the body or sign-in form');
+ c.document.querySelectorAll=()=>[{textContent:'Choose your preferred sign-in option:'}];assert.equal(c.readTrackerSessionState().expired,false);
 console.log('PASS: explicit Tracker expiry detection; no expiry inference from generic help or authentication-page content.');

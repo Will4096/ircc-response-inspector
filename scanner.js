@@ -1,4 +1,8 @@
 function readTrackerSessionState(){
+  if(['https://gc.auth.canada.ca','https://clegc-gckey.gc.ca'].includes(location.origin)){
+    const headings=Array.from(document.querySelectorAll?.('h1')||[]).map(node=>(node.textContent||'').replace(/\s+/g,' ').trim());
+    return {expired:headings.some(text=>/^(?:invalid session|session (?:expired|timed out)|session (?:non valide|invalide|expir[ée]e?))\b/i.test(text))};
+  }
   if(location.origin!=='https://ircc-services.canada.ca')return {expired:false};
   const text=(document.body.innerText||'').slice(0,16000).replace(/\s+/g,' ');
   return {expired:/(?:your\s+)?session\s+(?:(?:has|is)\s+)?(?:expired|timed\s+out)|(?:votre\s+)?session\s+(?:a\s+expir[ée]|est\s+expir[ée]e)|会话已(?:过期|超时)|登录已(?:过期|超时)/i.test(text)};
