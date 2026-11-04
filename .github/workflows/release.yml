@@ -44,6 +44,14 @@ jobs:
           node comparison-tests.mjs
           node i18n-tests.mjs
           node privacy-tests.mjs
+          node mail-tests.mjs
+          node mail-content-tests.mjs
+          node ui-tests.mjs
+          node backup-tests.mjs
+          node submit-locator-tests.mjs
+          node search-submit-tests.mjs
+          node official-update-tests.mjs
+          python3 windows/test_mail_host.py
 
       - name: Verify version, archive and notes
         run: |

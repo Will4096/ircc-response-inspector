@@ -50,7 +50,7 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
   },
-  "version_name": "4.2.0-mail-preview",
+  "version_name": "4.2.0",
   "optional_permissions": [
     "identity",
     "nativeMessaging"
