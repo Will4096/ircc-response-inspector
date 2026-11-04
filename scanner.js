@@ -1,3 +1,12 @@
+function readTrackerSessionState(){
+  if(['https://gc.auth.canada.ca','https://clegc-gckey.gc.ca'].includes(location.origin)){
+    const headings=Array.from(document.querySelectorAll?.('h1')||[]).map(node=>(node.textContent||'').replace(/\s+/g,' ').trim());
+    return {expired:headings.some(text=>/^(?:invalid session|session (?:expired|timed out)|session (?:non valide|invalide|expir[ée]e?))\b/i.test(text))};
+  }
+  if(location.origin!=='https://ircc-services.canada.ca')return {expired:false};
+  const text=(document.body.innerText||'').slice(0,16000).replace(/\s+/g,' ');
+  return {expired:/(?:your\s+)?session\s+(?:(?:has|is)\s+)?(?:expired|timed\s+out)|(?:votre\s+)?session\s+(?:a\s+expir[ée]|est\s+expir[ée]e)|会话已(?:过期|超时)|登录已(?:过期|超时)/i.test(text)};
+}
 function readVerificationState(){
   const text=(document.body.innerText || '').replace(/\s+/g,' ');
   const message=text.match(/(?:The verification code you entered does not match the code we sent you\.?|(?:The )?(?:verification )?code (?:has expired|is invalid|is incorrect)\.?|too many (?:unsuccessful )?attempts)/i)?.[0] || '';
@@ -21,7 +30,9 @@ function readOverview(){
   const heading=compact(document.querySelector('h1')?.textContent);
   const number=body.match(/Application number:\s*([A-Z0-9]+)/i)?.[1] || '';
   const status=Array.from(document.querySelectorAll('h2')).map(element=>compact(element.textContent)).find(text=>/^Application status:/i.test(text))?.replace(/^Application status:\s*/i,'') || '';
-  return {application:{number,title:heading,status},applicants};
+  const overview=compact((document.querySelector('main')||document.body).innerText);
+  const update=overview.match(/(?:Last updated|Application last updated|Updated|Dernière mise à jour|Mis à jour le)\s*[:：]?\s*(\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?|[A-Za-zÀ-ÿ]+\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-zÀ-ÿ]+\s+\d{4})/i)?.[1];
+  return {application:{number,title:heading,status,...(update?{irccUpdatedAt:{value:update,source:'Tracker page'}}:{})},applicants};
 }
 function readApplicant(){
   const compact=text=>(text || '').replace(/\s+/g,' ').trim();

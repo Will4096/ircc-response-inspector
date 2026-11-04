@@ -1,12 +1,14 @@
 # IRCC Response Inspector
 
+> Version 4.2.0: persistent workspace, optional Gmail / Windows 163 assistance, cancellable verification countdown and per-applicant History update dates. See the [setup guide](MAIL-SETUP.en.md).
+
 [English](README.en.md) · [简体中文](README.md)
 
 ![Extension icon](icons/icon-128.png)
 
 **Unofficial Chrome extension · Local processing · MIT licensed**
 
-View IRCC Tracker progress, per-applicant History, raw Security status codes and changes since your last successful check in one interface. You do not need to inspect network requests or search through JSON yourself. You still sign in, review application details and enter the email verification code manually.
+View IRCC Tracker progress, per-applicant History, raw Security status codes and changes since your last successful check in one interface. You do not need to inspect network requests or search through JSON yourself. You sign in yourself. Manual code entry remains available; mailbox assistance and automatic verification are separate opt-in features.
 
 This independent tool is not affiliated with IRCC or the Government of Canada. It does not predict decisions or interpret undocumented status codes.
 
@@ -17,7 +19,7 @@ This independent tool is not affiliated with IRCC or the Government of Canada. I
 - Preserve History entries and display Security status codes as returned.
 - Compare complete successful checks within the same profile. Failed checks do not replace the baseline.
 - Chinese by default, with English support. The Chinese UI retains official field names such as Surname / Last name and Given name.
-- Export local JSON when needed, delete an individual profile or clear all local extension data.
+- Import and export password-encrypted backups excluding mailbox credentials and verification codes. Delete individual profiles or clear local data.
 
 ## Install
 
@@ -32,8 +34,8 @@ This is a GitHub-distributed unpacked extension, not Chrome Web Store approval. 
 
 1. Open Tracker and sign in yourself.
 2. Save information through **Manage applications**, verify the selected profile and fill the form.
-3. Review and submit the official form. Paste the email verification code manually and choose **Verify and check**. The extension does not read your mailbox.
-4. View progress, expand each applicant's History and export a local record only when needed.
+3. Review the filled form; submit immediately or cancel its five-second countdown. Enter the code manually or connect a mailbox in Settings. Automatic code verification requires separate opt-in.
+4. View progress, expand each applicant's History and create an encrypted backup when needed.
 
 Switch language in the popup header or **Extension options → Settings**. The local preference synchronizes across open extension pages.
 
@@ -49,7 +51,7 @@ Read the [privacy policy](PRIVACY.md), [security notes](SECURITY.md) and [publis
 
 ## Development and verification
 
-Current version: 3.4.1. No third-party runtime dependencies. Use Node.js 22 or later:
+Current version: 4.2.0. No third-party runtime dependencies. Use Node.js 22 or later:
 
 ~~~sh
 node tests.mjs

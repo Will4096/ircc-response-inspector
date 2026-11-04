@@ -9,3 +9,8 @@ For an ordinary bug report, use the repository Issues page and include only the 
 本扩展在本机处理申请资料，不使用开发者服务器或遥测。`debugger` 权限能力较强，代码只在官方 Tracker 标签页中使用，并在操作结束或离开 Tracker 时断开。不要安装不明来源的修改版。
 
 公开反馈只包含版本、复现步骤及脱敏示例。不要上传真实导出、编号、出生日期、验证码、token、cookie 或浏览器资料目录。尚未配置私人漏洞报告渠道，敏感问题请先通过维护者的公开 GitHub 主页协商私下联系方法。
+
+
+## Mail preview / 邮箱辅助预览
+
+Default-off optional mailbox access is confined to the feature branch. Do not put OAuth tokens, client secrets, app passwords, message bodies or codes in issues, fixtures, commits or exports. The 163 helper uses Windows DPAPI and read-only IMAP. Uninstall its independent Windows component when no longer needed; extension removal alone does not remove it. Gmail readonly authorizes the mailbox, even though queries are filtered. Real-provider tests and review are required before merging.

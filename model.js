@@ -22,5 +22,7 @@ function responseOwner(requestId,json){
   return requestId || null;
 }
 function captureSnapshot(state){
-  return {schemaVersion:3,profileId:state.profileId,active:state.active,status:state.status,reason:state.reason || '',startedAt:state.startedAt,finishedAt:state.finishedAt,application:state.application || {},applicants:state.applicants || [],responses:state.responses,analysis:responseAnalysis(state.responses,(state.applicants || []).map(person=>person.relationId)),errors:state.errors,...(state.comparison?{comparison:state.comparison}:{})};
+  const application={...(state.application||{})};
+  application.irccUpdatedAt=officialApplicationUpdate(state.responses,application.number)||application.irccUpdatedAt||null;
+  return {schemaVersion:3,profileId:state.profileId,active:state.active,status:state.status,reason:state.reason || '',startedAt:state.startedAt,finishedAt:state.finishedAt,application,applicants:state.applicants || [],responses:state.responses,analysis:responseAnalysis(state.responses,(state.applicants || []).map(person=>person.relationId)),errors:state.errors,...(state.comparison?{comparison:state.comparison}:{})};
 }

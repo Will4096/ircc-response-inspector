@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "3.4.1",
+  "version": "4.2.0",
   "description": "__MSG_extensionDescription__",
   "permissions": [
     "debugger",
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
-  "options_page": "options.html",
+  "options_page": "workspace.html?view=settings",
   "content_scripts": [
     {
       "matches": [
@@ -19,7 +20,8 @@
         "i18n.js",
         "form.js",
         "scanner.js",
-        "autofill.js"
+        "autofill.js",
+        "mail-content.js"
       ],
       "run_at": "document_idle"
     }
@@ -28,7 +30,6 @@
     "https://ircc-services.canada.ca/*"
   ],
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "24": "icons/icon-24.png",
@@ -47,6 +48,20 @@
   },
   "default_locale": "zh_CN",
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'; base-uri 'none';"
-  }
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://gmail.googleapis.com; base-uri 'none';"
+  },
+  "version_name": "4.2.0",
+  "optional_permissions": [
+    "identity",
+    "nativeMessaging"
+  ],
+  "optional_host_permissions": [
+    "https://gmail.googleapis.com/*",
+    "https://gc.auth.canada.ca/*",
+    "https://clegc-gckey.gc.ca/*"
+  ],
+  "side_panel": {
+    "default_path": "workspace.html?surface=panel"
+  },
+  "minimum_chrome_version": "116"
 }

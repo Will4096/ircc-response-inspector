@@ -5,8 +5,56 @@ importScripts('profiles.js');
 importScripts('comparison.js');
 importScripts('scanner.js');
 importScripts('privacy-data.js');
+importScripts('backup-core.js');
+importScripts('mail-core.js');
+importScripts('mail-assist.js');
 const sessions = new Map();
 const verificationLocks = new Set();
+const searchSubmissions=new Map(),fillLocks=new Set();
+const searchSubmitMeta=p=>({id:p.id,profileId:p.application.id,phase:p.phase,deadline:p.deadline,createdAt:p.createdAt,viewId:p.viewId});
+async function writeSearchSubmit(p){await mailWrite(async()=>{if(searchSubmissions.get(p.tabId)===p)await chrome.storage.session.set({['autoSubmit:'+p.tabId]:searchSubmitMeta(p)});});}
+async function cancelSearchSubmit(id,expected){
+  const p=searchSubmissions.get(id);if(!p||(expected&&p.id!==expected))return {cancelled:false};
+  searchSubmissions.delete(id);clearTimeout(p.timeout);
+  await mailWrite(()=>chrome.storage.session.remove('autoSubmit:'+id));
+  if(sessions.get(id)===p.state&&['countdown','submitting'].includes(p.state.status))await finish(id,'ready','自动提交已取消，请手动点击官网 Submit。');
+  return {cancelled:true};
+}
+async function scheduleSearchSubmit(id,application){
+  await cancelSearchSubmit(id);
+  const p={id:crypto.randomUUID(),tabId:id,application,createdAt:Date.now(),deadline:null,phase:'awaiting',state:sessions.get(id)};
+  searchSubmissions.set(id,p);p.state.status='countdown';await publish(id,p.state);await writeSearchSubmit(p);
+  p.timeout=setTimeout(()=>void cancelSearchSubmit(id,p.id),8000);return searchSubmitMeta(p);
+}
+const trackerRelevant=url=>{try{const u=new URL(url);return u.protocol==='https:'&&['ircc-services.canada.ca','gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(u.hostname);}catch{return false;}};
+async function trackerAuthAccess(){try{return await chrome.permissions.contains({origins:TrackerAuthOrigins});}catch{return false;}}
+async function rememberTrackerTab(tab){
+  if(tab?.id===undefined||tab.windowId===undefined||!trackerRelevant(tab.url))return;
+  const key='tracker:window:'+tab.windowId,saved=(await chrome.storage.session.get(key))[key];
+  if(saved?.tabId!==tab.id)await chrome.storage.session.set({[key]:{tabId:tab.id}});
+}
+async function findTrackerTab(windowId,tabId){
+  const key='tracker:window:'+windowId,saved=(await chrome.storage.session.get(key))[key];
+  const accept=tab=>tab?.windowId===windowId&&(trackerRelevant(tab.url)||(!tab.url&&saved?.tabId===tab.id));
+  for(const id of [...new Set([tabId,saved?.tabId].filter(id=>id!==undefined))]){
+    try{const tab=await chrome.tabs.get(id);if(accept(tab))return tab;}catch{}
+  }
+  const active=await chrome.tabs.query({active:true,windowId});
+  if(accept(active[0])){await rememberTrackerTab(active[0]);return active[0];}
+  const origins=['https://ircc-services.canada.ca/*'];
+  for(const origin of TrackerAuthOrigins)try{if(await chrome.permissions.contains({origins:[origin]}))origins.push(origin);}catch{}
+  const tabs=await chrome.tabs.query({windowId,url:origins}),found=tabs.find(accept);
+  if(found)await rememberTrackerTab(found);return found;
+}
+let backupRestoring=false;
+// Use Chrome's persistent host from the very first toolbar click. A transient
+// action popup can disappear before handing control over to a side panel.
+function configureQueryPanel(){
+  return chrome.sidePanel?.setPanelBehavior?.({openPanelOnActionClick:true})?.catch(()=>{});
+}
+configureQueryPanel();
+chrome.runtime.onInstalled?.addListener(configureQueryPanel);
+chrome.runtime.onStartup?.addListener(configureQueryPanel);
 // Remove the mailbox listener and metadata left by 3.1.0–3.1.2 on upgrade.
 async function removeLegacyMailAssist(){
   if(chrome.scripting?.getRegisteredContentScripts){
@@ -103,13 +151,98 @@ function findFields(value, path = '$', found = []) {
 }
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   (async () => {
-    const id = sender.tab?.id ?? message.tabId;
+    const id = mailExtensionSender(sender)?message.tabId:sender.tab?.id ?? message.tabId;
+    if(['armSearchSubmit','commitSearchSubmit','cancelSearchSubmit'].includes(message.action)){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const p=searchSubmissions.get(id);if(!p||p.id!==message.submissionId)return {cancelled:true};
+      if(message.action==='cancelSearchSubmit')return p.phase==='committing'?{cancelled:false}:cancelSearchSubmit(id,p.id);
+      if(message.action==='armSearchSubmit'){
+        if(typeof message.viewId!=='string'||message.viewId.length>100)throw Error('自动提交未开始，请手动提交。');
+        if(p.phase==='awaiting'){p.viewId=message.viewId;p.phase='armed';p.deadline=Date.now()+5000;clearTimeout(p.timeout);p.timeout=setTimeout(()=>void cancelSearchSubmit(id,p.id),15000);await writeSearchSubmit(p);}
+        return {pending:searchSubmitMeta(p)};
+      }
+      if(p.viewId!==message.viewId){await cancelSearchSubmit(id,p.id);return {cancelled:true};}
+      if(p.phase!=='armed'||(message.immediate!==true&&Date.now()<p.deadline))return {pending:searchSubmitMeta(p)};
+      p.phase='committing';clearTimeout(p.timeout);await writeSearchSubmit(p);
+      let request;
+      try{
+        const selected=await chrome.storage.local.get(['applications','selectedApplicationId']),tab=await chrome.tabs.get(id);
+        const profile=selected.applications?.find(a=>a.id===p.application.id);
+        if(selected.selectedApplicationId!==p.application.id||JSON.stringify(profile)!==JSON.stringify(p.application)||!allowed(tab.url)||new URL(tab.url).pathname!=='/2/ast-search'||tab.active===false||searchSubmissions.get(id)!==p)throw Error('页面或申请已变化，自动提交已取消。');
+        const ready=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[profile,false]});
+        if(!ready[0]?.result?.ok)throw Error(ready[0]?.result?.message||'表单尚未就绪，请手动提交。');
+        await mailTrack(id,profile.applicationNumber);request=mailRequests.get(id);
+        const current=await chrome.storage.local.get('selectedApplicationId');
+        if(current.selectedApplicationId!==profile.id||searchSubmissions.get(id)!==p)throw Error('页面或申请已变化，自动提交已取消。');
+        await finish(id,'submitting','正在提交查询…');
+        p.clickAttempted=true;
+        const clicked=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[profile,true]});
+        if(!clicked[0]?.result?.ok){p.clickAttempted=false;throw Error(clicked[0]?.result?.message||'表单尚未就绪，请手动提交。');}
+        searchSubmissions.delete(id);await chrome.storage.session.remove('autoSubmit:'+id);
+        await finish(id,'submitted','查询已提交，正在等待验证码页面。');return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
+      }catch(error){
+        if(p.clickAttempted){try{const tab=await chrome.tabs.get(id);if(allowed(tab.pendingUrl||tab.url)&&new URL(tab.pendingUrl||tab.url).pathname==='/2/ast-otp-verification'){searchSubmissions.delete(id);await chrome.storage.session.remove('autoSubmit:'+id);await finish(id,'submitted','查询已提交，正在等待验证码页面。');return {submitted:true,message:'查询已提交，正在等待验证码页面。'};}}catch{}}
+        if(request&&!p.clickAttempted)await mailCancel(id,request);await cancelSearchSubmit(id,p.id);
+        return {cancelled:true,message:/[\u3400-\u9fff]/.test(error.message)?error.message:'自动提交结果尚未确认，请查看官网提示，不会自动重复提交。'};
+      }
+    }
+    if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
+    if(message.action==='restoreBackup'){
+      if(!mailExtensionSender(sender))throw Error('backup.permission');
+      const data=Backup.clean(message.data);
+      if([...sessions.values()].some(s=>s.active)||verificationLocks.size||[...searchSubmissions.values()].some(p=>p.phase==='committing'))throw Error('backup.busy');
+      backupRestoring=true;
+      try{
+        for(const [tabId,p] of [...searchSubmissions])await cancelSearchSubmit(tabId,p.id);
+        const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
+        const nextLocal={applications:data.applications,selectedApplicationId:data.selectedApplicationId,uiLanguage:data.uiLanguage,autoFill:data.autoFill},nextSession={};
+        for(const key of Object.keys(local))if(key.startsWith('comparison:profile:')||key.startsWith('mailPending:'))nextLocal[key]=null;
+        for(const key of Object.keys(session))if(key.startsWith('capture:')||key.startsWith('fillIntent:')||key.startsWith('pageNotice:')||key.startsWith('autoSubmit:'))nextSession[key]=null;
+        for(const [id,value] of Object.entries(data.comparisons))nextLocal['comparison:profile:'+id]=value;
+        for(const [id,value] of Object.entries(data.captures))nextSession['capture:profile:'+id]=value;
+        await mailCancelAll();
+        try{
+          await chrome.storage.session.set(nextSession);await chrome.storage.local.set(nextLocal);sessions.clear();
+        }catch(error){
+          await chrome.storage.session.set(Object.fromEntries(Object.keys(nextSession).map(k=>[k,session[k]??null])));
+          await chrome.storage.local.set(Object.fromEntries(Object.keys(nextLocal).map(k=>[k,local[k]??null])));
+          throw Error('backup.write');
+        }
+        return {ok:true};
+      }finally{backupRestoring=false;}
+    }
+    if(message.action==='resolveTrackerTab'){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const tab=await findTrackerTab(message.windowId,message.tabId);return {tabId:tab?.id};
+    }
+    if(message.action==='openTrackerPage'){
+      if(!mailExtensionSender(sender))throw new Error('请从扩展页面操作。');
+      const win=await chrome.windows.get(message.windowId);
+      let target=await findTrackerTab(win.id,id);
+      if(!target&&!message.forceNew&&!await trackerAuthAccess())return {needsAccess:true};
+      if(target){
+        if(!message.resume){await mailCancel(target.id);await chrome.storage.session.remove('pageNotice:'+target.id);if(sessions.get(target.id)?.active)await finish(target.id,'stopped','已停止');}
+        const previous=target;target={...previous,...await chrome.tabs.update(target.id,{active:true,...(message.resume?{}:{url:'https://ircc-services.canada.ca/2/ast'})})};
+      }else target=await chrome.tabs.create({windowId:win.id,url:'https://ircc-services.canada.ca/2/ast'});
+      await rememberTrackerTab(target);
+      return {ok:true,tabId:target.id};
+    }
+    if(message.action==='mailConfirm'||message.action==='mailAutoCommit'){
+      if(!mailExtensionSender(sender) && !mailTrackerSender(sender))throw new Error('mail.permission');
+      if(message.action==='mailAutoCommit'&&!mailExtensionSender(sender))throw Error('mail.permission');
+      const code=message.action==='mailAutoCommit'?await mailAutoControl(id,message):await mailTake(id,message);
+      message={...message,action:'verify',code};
+    }else if(message.action==='mailTrackRequest'&&mailTrackerSender(sender)&&new URL(sender.url).pathname==='/2/ast-search'){
+      const cancellation=cancelSearchSubmit(id),tracking=mailHandle(message,sender);await cancellation;return tracking;
+    }else if(String(message.action).startsWith('mail'))return mailHandle(message,sender);
     if(message.action==='clearLocalData' || message.action==='removeProfile'){
       if(sender.tab && !String(sender.url || '').startsWith(chrome.runtime.getURL('')))throw new Error('请从扩展设置操作。');
       if(message.action==='clearLocalData'){
+        for(const [tabId,p] of [...searchSubmissions])await cancelSearchSubmit(tabId,p.id);
         for(const [tabId,state] of sessions)if(state.active)await finish(tabId,'stopped','已停止');
-        sessions.clear();await chrome.storage.local.clear();await chrome.storage.session.clear();return {ok:true};
+        const helperCleared=await mailForget();sessions.clear();await chrome.storage.local.clear();await chrome.storage.session.clear();return {ok:true,helperCleared};
       }
+      await mailCancelAll();
       const config=await chrome.storage.local.get(['applications','selectedApplicationId']);
       const applications=(config.applications || []).filter(item=>item.id!==message.profileId);
       await removeProfileData(message.profileId);
@@ -118,9 +251,45 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     }
     if(message.action==='getContext'){
       let tab;try{tab=await chrome.tabs.get(id);}catch{return {stage:'closed'};}
+      await rememberTrackerTab(tab);
+      if(!tab.url&&tab.windowId!==undefined){const saved=(await chrome.storage.session.get('tracker:window:'+tab.windowId))['tracker:window:'+tab.windowId];if(saved?.tabId===id){if(mailRequests.has(id))await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','登录状态已变化，请在官网完成登录。');return {stage:'login',tabId:id};}}
+      if(!tab.url||(!trackerRelevant(tab.url)&&!await trackerAuthAccess()))return {stage:'access',tabId:id};
       let url;try{url=new URL(tab.url);}catch{return {stage:'closed'};}
+      if(['gc.auth.canada.ca','clegc-gckey.gc.ca'].includes(url.hostname)){
+        let expired=false;
+        if(tab.status!=='loading'&&await trackerAuthAccess()&&chrome.scripting?.executeScript)try{const result=await chrome.scripting.executeScript({target:{tabId:id},func:readTrackerSessionState});expired=result[0]?.result?.expired===true;}catch{}
+        if(mailRequests.has(id))await mailCancel(id);
+        if(sessions.get(id)?.active)await finish(id,'failed',expired?'Tracker 登录已超时，请重新登录。':'登录状态已变化，请在官网完成登录。');
+        return {stage:expired?'expired':'login',tabId:id};
+      }
       const stages={'/2/ast':'role','/2/ast-search':'form','/2/ast-otp-verification':'verification','/2/ast-details':'results','/2/ast-view-application':'results','/2/ast-history':'results'};
-      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id};
+      let expired=false;
+      if(allowed(tab.url)&&tab.status!=='loading'&&chrome.scripting?.executeScript){
+        try{const result=await chrome.scripting.executeScript({target:{tabId:id},func:readTrackerSessionState});expired=result[0]?.result?.expired===true;}catch{}
+      }
+      if(expired){await cancelSearchSubmit(id);await mailCancel(id);if(sessions.get(id)?.active)await finish(id,'failed','Tracker 登录已超时，请重新登录。');return {stage:'expired',tabId:id};}
+      let observerReady;
+      if(tab.status!=='loading'&&allowed(tab.url)&&['/2/ast-search','/2/ast-otp-verification'].includes(url.pathname)){
+        const compatible=health=>health?.requestTracking===true&&(health.protocol===undefined||health.protocol===1);
+        try{observerReady=compatible(await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'}));}catch{observerReady=false;}
+        if(!observerReady)try{await chrome.scripting.executeScript({target:{tabId:id},files:['mail-content.js']});observerReady=compatible(await chrome.tabs.sendMessage(id,{action:'mailObserverHealth'}));}catch{observerReady=false;}
+      }
+      const notice=(await chrome.storage.session.get('pageNotice:'+id))['pageNotice:'+id],selection=await chrome.storage.local.get('selectedApplicationId');
+      const pageNotice=notice?.path===url.pathname&&notice.profileId===selection.selectedApplicationId&&Date.now()-notice.createdAt<300000?notice:null;
+      const pending=searchSubmissions.get(id);
+      return {stage:url.hostname==='ircc-services.canada.ca'?(stages[url.pathname] || (url.searchParams.has('relation_id')?'results':'login')):/^(gc.auth.canada.ca|clegc-gckey.gc.ca)$/.test(url.hostname)?'login':'closed',tabId:id,...(observerReady===undefined?{}:{observerReady}),...(pageNotice?{pageNotice}: {}),...(pending?{autoSubmit:searchSubmitMeta(pending)}:{})};
+    }
+    if(message.action==='trackerPageNotice'){
+      if(!mailTrackerSender(sender))throw Error('请从扩展页面操作。');
+      const {selectedApplicationId}=await chrome.storage.local.get('selectedApplicationId');
+      const kind=['filled','refreshRequired','pageError'].includes(message.kind)?message.kind:'pageError';
+      await chrome.storage.session.set({['pageNotice:'+id]:{kind,text:kind==='filled'?String(message.text||'').slice(0,500):'',profileId:selectedApplicationId||'',path:new URL(sender.url).pathname,createdAt:Date.now()}});return {ok:true};
+    }
+    if(message.action==='locateSubmit'){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      const tab=await chrome.tabs.get(id);if(!allowed(tab.url)||new URL(tab.url).pathname!=='/2/ast-search')return {ok:false};
+      await chrome.tabs.update(id,{active:true});
+      const result=await chrome.scripting.executeScript({target:{tabId:id},func:locateTrackerSubmit});return result[0]?.result||{ok:false};
     }
     if(message.action==='captureContext'){
       const state=sessions.get(id);
@@ -188,12 +357,14 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       await advanceCapture(id,state);return {ok:true};
     }
     if(message.action==='fill'){
+      if(fillLocks.has(id)||searchSubmissions.has(id))return {ok:true,message:'正在填写或等待自动提交。'};
+      fillLocks.add(id);try{
       const tab=await chrome.tabs.get(id);
       const {applications=[]}=await chrome.storage.local.get('applications');
       const application=applications.find(item=>item.id===message.applicationId);
       if(!application)throw new Error('请先添加并选择申请资料。');
       const selection=await chrome.storage.local.get('selectedApplicationId');
-      if(selection.selectedApplicationId!==application.id)await chrome.storage.local.set({selectedApplicationId:application.id});
+      if(selection.selectedApplicationId!==application.id)throw Error('所选申请已变化，请重新填写。');
       if(!allowed(tab.url))throw new Error('请先打开 Tracker。');
       if(new URL(tab.url).pathname==='/2/ast'){
         await chrome.storage.session.set({['fillIntent:'+id]:application.id});
@@ -225,11 +396,20 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const result=results[0]?.result;
       if(!result?.ok)throw new Error(result?.message || '填写失败。');
       await chrome.storage.session.remove('fillIntent:'+id);
-      await finish(id,'ready','请确认申请信息，点击 Submit 后继续。');
+      let canSubmit=false;
+      if(!result.manualRequired){
+        let ready;
+        for(let attempt=0;attempt<5;attempt++){ready=await chrome.scripting.executeScript({target:{tabId:id},func:submitTrackerSearch,args:[application,false]});if(ready[0]?.result?.ok||ready[0]?.result?.alreadySubmitted)break;if(attempt<4)await new Promise(resolve=>setTimeout(resolve,100));}
+        canSubmit=ready[0]?.result?.ok===true;if(!canSubmit)result.message=ready[0]?.result?.message||'表单尚未就绪，请手动提交。';
+      }
+      await finish(id,'ready',result.message);
+      if(canSubmit){await scheduleSearchSubmit(id,application);return {...result,message:'资料已填写，倒计时后自动提交。'};}
       try{await chrome.tabs.sendMessage(id,{action:'showFilled',message:result.message});}catch{}
       return result;
+      }finally{fillLocks.delete(id);}
     }
     if (message.action === 'verify' || message.action === 'start') {
+      if(message.action==='verify' && !message.candidateId)await mailCancel(id);
       if(message.action==='verify'){
         if(verificationLocks.has(id) || sessions.get(id)?.verificationSubmitting)throw new Error('正在验证，请稍候。');
         if(verificationLocks.has(id))throw new Error('正在验证，请稍候。');
@@ -283,6 +463,8 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       } finally {verificationLocks.delete(id);}
     }
     if (message.action === 'stop') {
+      await cancelSearchSubmit(id);
+      await mailCancel(id,undefined,'cancelled');
       if(sessions.get(id)?.active)await finish(id,'stopped','已停止');
       return {ok:true};
     }
@@ -313,7 +495,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     if (message.action === 'clear') { await finish(id,'idle','结果已清空');sessions.delete(id);await chrome.storage.session.remove('capture:'+id);return {ok:true}; }
     throw new Error('Unknown action');
   })().then(reply, async error => {
-    const id=sender.tab?.id ?? message.tabId;
+    const id=mailExtensionSender(sender)?message.tabId:sender.tab?.id ?? message.tabId;
     if(['fill','verify','start'].includes(message.action) && sessions.get(id)?.active)await finish(id,'failed',error.message);
     reply({error:error.message});
   });
@@ -401,3 +583,9 @@ chrome.tabs.onRemoved.addListener(id => {verificationLocks.delete(id);const stat
 chrome.tabs.onUpdated?.addListener((id,change)=>{
   if(change.url && sessions.get(id)?.active && !allowed(change.url))void finish(id,'failed','查询页面已离开 Tracker，已停止。');
 });
+// Remember only Tracker pages we can identify; keep the same tab identity through authentication redirects.
+chrome.tabs.onUpdated?.addListener((id,change,tab)=>{if(change.url&&allowed(change.url)&&tab?.windowId!==undefined)void rememberTrackerTab({...tab,id,url:change.url}).catch(()=>{});});
+chrome.tabs.onRemoved.addListener((id,info)=>{if(info?.windowId!==undefined)void(async()=>{const key='tracker:window:'+info.windowId,saved=(await chrome.storage.session.get(key))[key];if(saved?.tabId===id)await chrome.storage.session.remove(key);})().catch(()=>{});});
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&(changes.selectedApplicationId||changes.applications||(changes.autoFill&&changes.autoFill.newValue===false)))for(const [id,p] of [...searchSubmissions])void cancelSearchSubmit(id,p.id).catch(()=>{});});
+chrome.tabs.onUpdated?.addListener((id,change)=>{if(change.url){try{if(!allowed(change.url)||new URL(change.url).pathname!=='/2/ast-search')void cancelSearchSubmit(id).catch(()=>{});}catch{}}});
+chrome.tabs.onRemoved.addListener(id=>void cancelSearchSubmit(id).catch(()=>{}));

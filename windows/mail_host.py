@@ -1,0 +1,283 @@
+"""Windows-only Native Messaging host. Standard library; no HTTP listener or telemetry."""
+import ctypes
+from ctypes import wintypes
+import datetime as dt
+import email
+from html.parser import HTMLParser
+from email import policy
+from email.utils import getaddresses
+import imaplib
+import json
+import os
+from pathlib import Path
+import re
+import ssl
+import struct
+import sys
+
+MAX_MESSAGE = 262144
+HELPER_VERSION = '1.5'
+ROOT = Path(__file__).resolve().parent
+SECRET = ROOT / 'mailbox.dpapi'
+
+
+def diagnostic(stage, count=None):
+    # Fixed vocabulary only: never log protocol payloads, exception text or secrets.
+    if stage not in {'start', 'login_ok', 'search_ok', 'search_fallback', 'messages_ready', 'match_recipient', 'match_template', 'match_context', 'match_account_words', 'match_digits', 'complete', 'mail.credentials', 'mail.network', 'mail.permission', 'mail.stale', 'mail.account', 'mail.windows'}:
+        return
+    try:
+        ROOT.mkdir(parents=True, exist_ok=True)
+        target = ROOT / 'diagnostic.log'
+        if target.exists() and target.stat().st_size > 65536:
+            target.replace(ROOT / 'diagnostic.previous.log')
+        event = {'time': dt.datetime.now(dt.timezone.utc).isoformat(), 'stage': stage}
+        if type(count) is int and 0 <= count <= 100000:
+            event['count'] = count
+        with target.open('a', encoding='utf-8') as stream:
+            stream.write(json.dumps(event) + '\n')
+    except OSError:
+        pass  # Diagnostic failures must not break verification.
+
+
+def protect(data, decrypt=False):
+    if sys.platform != 'win32':
+        raise ValueError('mail.windows')
+    class Blob(ctypes.Structure):
+        _fields_ = [('size', wintypes.DWORD), ('data', ctypes.POINTER(ctypes.c_ubyte))]
+    buffer = ctypes.create_string_buffer(data)
+    source = Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_ubyte)))
+    target = Blob()
+    crypt = ctypes.windll.crypt32
+    if decrypt:
+        ok = crypt.CryptUnprotectData(ctypes.byref(source), None, None, None, None, 1, ctypes.byref(target))
+    else:
+        ok = crypt.CryptProtectData(ctypes.byref(source), 'IRCC mailbox', None, None, None, 1, ctypes.byref(target))
+    if not ok:
+        raise ValueError('mail.credentials')
+    try:
+        return ctypes.string_at(target.data, target.size)
+    finally:
+        ctypes.windll.kernel32.LocalFree(target.data)
+
+
+def account(value):
+    value = str(value or '').strip().lower()
+    if not re.fullmatch(r'[^\s@]+@163\.com', value):
+        raise ValueError('mail.config')
+    return value
+
+
+def connect(address, password):
+    # Fixed endpoint, certificate verification on. No arbitrary host/port input.
+    client = imaplib.IMAP4_SSL('imap.163.com', 993, ssl_context=ssl.create_default_context(), timeout=12)
+    try:
+        client.login(address, password)
+        # NetEase may require the standardized IMAP ID extension for third-party clients.
+        if b'ID' in [c.upper() if isinstance(c, bytes) else c.upper().encode() for c in client.capabilities]:
+            if 'ID' not in imaplib.Commands:
+                imaplib.Commands['ID'] = ('AUTH', 'SELECTED')
+            client._simple_command('ID', '("name" "IRCCMailHelper" "version" "1.0")')
+        if client.select('INBOX', readonly=True)[0] != 'OK':
+            raise ValueError('mail.credentials')
+        return client
+    except Exception:
+        try:
+            client.logout()
+        except Exception:
+            pass
+        raise
+
+
+def logout(client):
+    try:
+        client.logout()
+    except Exception:
+        pass
+
+
+class MailText(HTMLParser):
+    """Extract text only; no browser, scripts, images or external requests."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.blocked = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style', 'head', 'noscript', 'svg'):
+            self.blocked.append(tag)
+
+    def handle_endtag(self, tag):
+        if self.blocked and tag == self.blocked[-1]:
+            self.blocked.pop()
+
+    def handle_data(self, data):
+        if not self.blocked:
+            self.parts.append(data)
+
+
+def extract_message(uid, raw, received_at):
+    message = email.message_from_bytes(raw, policy=policy.default)
+    texts, html = [], []
+    # Never render HTML, fetch remote images, or read attachments.
+    for part in message.walk():
+        if part.get_content_type() not in ('text/plain', 'text/html') or part.get_content_disposition() == 'attachment' or part.get_filename():
+            continue
+        try:
+            content = part.get_content()[:131072]
+            if part.get_content_type() == 'text/plain':
+                if content.strip():
+                    texts.append(content[:64000])
+            else:
+                parser = MailText()
+                parser.feed(content)
+                html.append(' '.join(parser.parts)[:64000])
+        except (LookupError, UnicodeError):
+            continue
+    recipients = [v.lower() for _, v in getaddresses(message.get_all('To', []) + message.get_all('Delivered-To', []))]
+    return {'id': str(uid), 'receivedAt': received_at, 'from': str(message.get('From', ''))[:200],
+            'to': recipients, 'subject': str(message.get('Subject', ''))[:500], 'text': '\n'.join(texts or html)[:64000]}
+
+
+def internal_time(metadata):
+    parsed = imaplib.Internaldate2tuple(metadata)
+    # Internaldate2tuple is local time; timestamp handles the local UTC offset.
+    if parsed is None:
+        return None
+    import time
+    return time.mktime(parsed) * 1000
+
+
+def search_date(since, zone=None):
+    # IMAP SINCE compares calendar dates, ignoring clock time and time zone.
+    # Use the Windows user's local calendar date, not an unconditional UTC shift.
+    day = dt.datetime.fromtimestamp(since / 1000, zone)
+    month = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')[day.month - 1]
+    return f'{day.day:02d}-{month}-{day.year}'
+
+
+def handle(request):
+    action = request.get('action')
+    if action == 'status':
+        return {'ok': True, 'version': HELPER_VERSION, 'configured': SECRET.exists()}
+    if action == 'clear':
+        SECRET.unlink(missing_ok=True)
+        return {'ok': True}
+    if action == 'configure':
+        address = account(request.get('email'))
+        password = request.get('password')
+        if not isinstance(password, str) or not 8 <= len(password) <= 256 or '\n' in password or '\r' in password:
+            raise ValueError('mail.secret')
+        client = connect(address, password)
+        logout(client)
+        ROOT.mkdir(parents=True, exist_ok=True)
+        encrypted = protect(json.dumps({'email': address, 'password': password}).encode())
+        temporary = SECRET.with_suffix('.tmp')
+        temporary.write_bytes(encrypted)
+        os.replace(temporary, SECRET)
+        return {'ok': True}
+    if action not in ('poll', 'test'):
+        raise ValueError('mail.permission')
+    address = account(request.get('email'))
+    if action == 'poll':
+        since = float(request.get('since', 0))
+        now = dt.datetime.now(dt.timezone.utc).timestamp() * 1000
+        if not now - 86401000 <= since <= now + 60000:
+            raise ValueError('mail.stale')
+    if not SECRET.exists():
+        raise ValueError('mail.credentials')
+    credentials = json.loads(protect(SECRET.read_bytes(), decrypt=True))
+    if credentials['email'] != address:
+        raise ValueError('mail.account')
+    client = connect(address, credentials['password'])
+    diagnostic('login_ok')
+    if action == 'test':
+        logout(client)
+        return {'ok': True}
+    messages = []
+    try:
+        date = search_date(since)
+        # NetEase's FROM search returned zero despite matching headers on this account.
+        # Fetch only a bounded header sample for the local-date request boundary;
+        # exact receipt time and sender checks below precede every body read.
+        status, data = client.uid('search', None, 'SINCE', date)
+        if status != 'OK':
+            raise ValueError('mail.network')
+        diagnostic('search_ok', len((data[0] or b'').split()))
+        for uid in (data[0] or b'').split()[-10:]:
+            status, result = client.uid('fetch', uid, '(INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO DELIVERED-TO SUBJECT)])')
+            if status != 'OK':
+                continue
+            tuples = [v for v in result if isinstance(v, tuple)]
+            if not tuples:
+                continue
+            metadata, headers = tuples[0]
+            received = internal_time(metadata)
+            size = re.search(rb'RFC822\.SIZE\s+(\d+)', metadata)
+            if received is None or received < since or not size or int(size[1]) > 131072:
+                continue
+            parsed = email.message_from_bytes(headers, policy=policy.default)
+            senders = getaddresses(parsed.get_all('From', []))
+            if not any(re.search(r'@(?:[a-z0-9-]+\.)*(?:cic\.gc\.ca|canada\.ca)$', v, re.I) for _, v in senders):
+                continue
+            status, result = client.uid('fetch', uid, '(BODY.PEEK[])')
+            if status == 'OK':
+                body = next((v[1] for v in result if isinstance(v, tuple)), b'')
+                message = extract_message(uid.decode('ascii'), body, received)
+                text = message['subject'] + '\n' + message['text']
+                diagnostic('match_recipient', int(address in message['to']))
+                diagnostic('match_template', int(bool(re.search(r'^IRCC Portal\s*[-–—]\s*New version account\s*[-–—]\s*Confirm your account', message['subject'], re.I))))
+                diagnostic('match_context', int(bool(re.search(r'(verification|one[ -]time|security|confirmation)\s*(code|password)|code\s+de\s+v[ée]rification', text, re.I))))
+                diagnostic('match_account_words', int(bool(re.search(r'(create|creating|register|registration|new)\s+(an?\s+)?(IRCC\s+)?(portal\s+)?account|permanent\s+residen(ce|t)\s+portal|account\s+creation', text, re.I))))
+                diagnostic('match_digits', len(set(re.findall(r'(?<!\d)\d{6}(?!\d)', text))))
+                messages.append(message)
+        diagnostic('messages_ready', len(messages))
+        return {'messages': messages}
+    finally:
+        logout(client)
+
+
+def read_exact(stream, size):
+    chunks = []
+    while size:
+        chunk = stream.read(size)
+        if not chunk:
+            return None
+        chunks.append(chunk)
+        size -= len(chunk)
+    return b''.join(chunks)
+
+
+def main():
+    if sys.platform != 'win32':
+        return
+    import msvcrt
+    msvcrt.setmode(sys.stdin.fileno(), os.O_BINARY)
+    msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
+    header = read_exact(sys.stdin.buffer, 4)
+    if header is None:
+        return
+    length = struct.unpack('<I', header)[0]
+    if not 0 < length <= MAX_MESSAGE:
+        return
+    try:
+        diagnostic('start')
+        raw = read_exact(sys.stdin.buffer, length)
+        result = handle(json.loads(raw))
+    except imaplib.IMAP4.error:
+        result = {'error': 'mail.credentials'}
+    except ValueError as error:
+        result = {'error': str(error) if str(error).startswith('mail.') else 'mail.network'}
+    except Exception:
+        # Never expose exception strings (which can contain credentials or body text).
+        result = {'error': 'mail.network'}
+    diagnostic(result.get('error', 'complete'))
+    result.update({'helperVersion': HELPER_VERSION, 'protocol': 1})
+    output = json.dumps(result, ensure_ascii=False).encode('utf-8')
+    if len(output) > 1000000:
+        output = b'{"error":"mail.network"}'
+    sys.stdout.buffer.write(struct.pack('<I', len(output)) + output)
+    sys.stdout.buffer.flush()
+
+
+if __name__ == '__main__':
+    main()

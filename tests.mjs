@@ -1,11 +1,14 @@
 import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
 const root=new URL('./',import.meta.url);
 const read=name=>fs.readFile(new URL(name,root),'utf8');
 const names=['privacy-data.js','i18n.js','comparison.js','domain.js','model.js','profiles.js','scanner.js','form.js','background.js','autofill.js','popup.js','options.js'];
 for(const file of names)new vm.Script(await read(file),{filename:file});
 const manifest=JSON.parse(await read('manifest.json'));
+assert.equal(manifest.action.default_popup,undefined,'Toolbar must directly open a persistent side panel');
+assert.equal(manifest.side_panel.default_path,'workspace.html?surface=panel');
 for(const file of [...manifest.content_scripts[0].js,'popup.html','popup.css','options.html'])await fs.access(new URL(file,root));
 const domain={URL,Date};vm.createContext(domain);vm.runInContext(await read('domain.js'),domain);vm.runInContext(await read('model.js'),domain);
 const people=['Person A','Person B','Person C','Person D'];
@@ -27,13 +30,144 @@ const legacy={schemaVersion:2,active:true,status:'failed',reason:'读取超时',
 const recovered=domain.analyzeStoredCapture(legacy);assert.equal(recovered.status,'completed');assert.equal(recovered.active,false);assert.equal(recovered.applicants[2].history[0].key,'Security');assert.equal(recovered.analysis.total,68);
 async function harness(saved){
   let handler,network;let url='https://ircc-services.canada.ca/2/ast-details';let detached=0;let reloads=0;const moves=[];const timers=[];const stored=saved?{'capture:7':saved}:{};const bodies=new Map();
-  const context={URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{onMessage:{addListener:fn=>handler=fn}},storage:{local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
-  vm.createContext(context);for(const name of ['domain.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','background.js'])vm.runInContext(await read(name),context);
-  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message){return new Promise(resolve=>handler(message,{},resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
+  const context={crypto:webcrypto,URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,getManifest:()=>manifest,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
+  vm.createContext(context);for(const name of ['domain.js','form.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','backup-core.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
+  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
     bodies.set(key,json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:'https://ircc-services.canada.ca/api'}});
     await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:'https://ircc-services.canada.ca/api',status:200,mimeType:'application/json'}});
     await network({tabId:7},'Network.loadingFinished',{requestId:key});
   },async hang(){await network({tabId:7},'Network.responseReceived',{requestId:'forever',type:'Fetch',response:{url:'https://ircc-services.canada.ca/irrelevant',status:200,mimeType:'application/json'}});}};
+}
+{
+  const h=await harness();let registered=0;
+  h.context.chrome.sidePanel={setPanelBehavior:async options=>{assert.equal(options.openPanelOnActionClick,true);registered++;}};
+  await h.context.configureQueryPanel();assert.equal(registered,1,'Toolbar uses the native persistent panel behavior');
+}
+// Side-panel handoff runs in the worker and never reuses a tab in a different window.
+{
+  const h=await harness(),api=h.context.chrome,updates=[],created=[];
+  api.permissions={contains:async()=>true};api.windows={get:async id=>({id})};
+  api.tabs.get=async id=>({id,windowId:99,url:'https://ircc-services.canada.ca/2/ast-search'});
+  api.tabs.query=async options=>{assert.equal(options.windowId,1);return [];};
+  api.tabs.create=async options=>{created.push(options);return {id:8,...options};};
+  api.tabs.update=async(id,options)=>{updates.push(options);return {id,windowId:1,...options};};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.ok((await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7},sender)).ok);
+  assert.equal(created[0].windowId,1);assert.equal(updates.length,0);
+  api.tabs.get=async id=>({id,windowId:1,url:'https://ircc-services.canada.ca/2/ast-search'});
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7,resume:true},sender);
+  assert.equal(updates.length,1);assert.equal(updates[0].url,undefined,'Continue preserves form/session');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:7,resume:false},sender);
+  assert.equal(updates[1].url,'https://ircc-services.canada.ca/2/ast');
+  assert.ok((await h.send('openTrackerPage',{windowId:1})).error,'Web pages cannot use extension navigation command');
+}
+// Authentication recovery reuses only this window's established Tracker tab.
+{
+  const h=await harness(),api=h.context.chrome,db={},updates=[],created=[];let current={id:17,windowId:1,url:'https://ircc-services.canada.ca/2/ast-search'};
+  api.permissions={contains:async()=>true};api.windows={get:async id=>({id})};api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
+  api.tabs.get=async id=>{if(id!==current.id)throw Error('closed');return {...current};};
+  api.tabs.query=async options=>options.windowId===current.windowId?[{...current}]:[];
+  api.tabs.update=async(id,change)=>{updates.push({id,...change});current={...current,...change};return {...current};};api.tabs.create=async options=>{created.push(options);return {id:18,...options};};
+  await h.context.rememberTrackerTab(current);
+  current={id:17,windowId:1};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.equal((await h.sendExtension({action:'resolveTrackerTab',windowId:1},sender)).tabId,17);
+  await h.sendExtension({action:'openTrackerPage',windowId:1,resume:false},sender);
+  assert.equal(created.length,0);assert.equal(updates[0].id,17);assert.equal(updates[0].url,'https://ircc-services.canada.ca/2/ast');
+  current.url='https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic-expired';
+  api.scripting={executeScript:async request=>{assert.equal(request.func.name,'readTrackerSessionState');return [{result:{expired:true}}];}};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'expired','Authentication Invalid session signal routes to restart-only state');
+  api.scripting.executeScript=async()=>[{result:{expired:false}}];
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  let deniedReads=0;api.permissions.contains=async()=>false;api.scripting.executeScript=async()=>{deniedReads++;throw Error('Must not inspect auth headings without access');};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  assert.equal(deniedReads,0);api.permissions.contains=async()=>true;
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:true},sender);assert.equal(updates[1].url,undefined,'Continue does not reset a valid login');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(updates[2].url,'https://ircc-services.canada.ca/2/ast','Restart never reuses an expired authentication request');
+  assert.equal(created.length,0);assert.ok(!JSON.stringify(db).includes('synthetic-expired'),'No authentication URLs or parameters persisted');
+  current.url='https://work.example/';
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);assert.equal(created.length,1,'Never replace a visibly unrelated page');
+}
+// Reproduce real Chrome's withheld authentication URL, without pre-seeding a tab registry.
+{
+  const h=await harness(),api=h.context.chrome,db={},updates=[],created=[];let granted=false;
+  const visible=()=>({id:17,windowId:1,active:true,...(granted?{url:'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic'}:{})});
+  api.permissions={contains:async()=>granted};api.windows={get:async id=>({id})};
+  api.storage.session.get=async key=>({[key]:db[key]});api.storage.session.set=async values=>Object.assign(db,values);api.storage.session.remove=async key=>delete db[key];
+  api.tabs.get=async()=>visible();api.tabs.query=async options=>options.active?[visible()]:granted?[visible()]:[];
+  api.tabs.create=async options=>{created.push(options);return {id:18,...options};};api.tabs.update=async(id,change)=>{updates.push({id,...change});return {...visible(),...change};};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'access');
+  assert.equal((await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17},sender)).needsAccess,true);assert.equal(created.length,0,'Unknown URL is not proof that Tracker is absent');
+  granted=true;
+  assert.equal((await h.sendExtension({action:'resolveTrackerTab',windowId:1},sender)).tabId,17);
+  assert.equal((await h.sendExtension({action:'getContext',tabId:17},sender)).stage,'login');
+  await h.sendExtension({action:'openTrackerPage',windowId:1,tabId:17,resume:false},sender);
+  assert.equal(created.length,0);assert.equal(updates[0].id,17);assert.ok(!JSON.stringify(db).includes('reqId'));
+}
+// Restore replaces only backup-owned data, with rollback on write failure.
+{
+  const h=await harness(),api=h.context.chrome;
+  const p={id:'restored',label:'Demo',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-01',country:'China',role:'principalApplicantId',noGivenName:false};
+  const data={format:'ircc-local-data',version:1,applications:[p],captures:{},comparisons:{},autoFill:true,uiLanguage:'en'};
+  const local={applications:[],mailConnection:{email:'kept@example.com'},'comparison:profile:old':{value:1}},session={'capture:7':{value:1}};
+  api.storage.local.get=async()=>structuredClone(local);api.storage.session.get=async()=>structuredClone(session);
+  api.storage.local.set=async values=>Object.assign(local,values);api.storage.session.set=async values=>Object.assign(session,values);
+  const sender={url:'chrome-extension://test/settings.html'};
+  assert.equal((await h.sendExtension({action:'restoreBackup',data},sender)).ok,true);
+  assert.equal(local.applications[0].id,'restored');assert.equal(local.mailConnection.email,'kept@example.com');assert.equal(session['capture:7'],null);assert.equal(local['comparison:profile:old'],null);
+  const before=JSON.stringify(local);let fail=true;
+  api.storage.local.set=async values=>{if(fail){fail=false;throw Error('quota');}Object.assign(local,values);};
+  const changed={...data,applications:[{...p,id:'other'}]};
+  assert.equal((await h.sendExtension({action:'restoreBackup',data:changed},sender)).error,'backup.write');assert.equal(JSON.stringify(local),before);
+  assert.equal((await h.send('restoreBackup',{data})).error,'backup.permission');
+}
+{
+  const h=await harness();h.url='https://ircc-services.canada.ca/2/ast-search';
+  assert.equal((await h.send('getContext')).observerReady,false,'A stale/missing content script requires refresh');
+  h.context.chrome.tabs.sendMessage=async()=>({requestTracking:true,version:manifest.version});
+  assert.equal((await h.send('getContext')).observerReady,true,'Current submit observer acknowledges its version');
+  h.context.chrome.tabs.sendMessage=async()=>({requestTracking:true,version:'3.9.8'});
+  assert.equal((await h.send('getContext')).observerReady,true,'Compatible previous extension version does not block the current OTP page');
+  let injected=false;
+  h.context.chrome.tabs.sendMessage=async()=>injected?{requestTracking:true,protocol:1}:undefined;
+  h.context.chrome.scripting={executeScript:async request=>{if(request.files){assert.equal(request.files.join(','),'mail-content.js');injected=true;}return [{result:{expired:false}}];}};
+  assert.equal((await h.send('getContext')).observerReady,true,'Missing observer repairs in place without navigating to the search form');
+  h.context.chrome.tabs.get=async id=>{assert.equal(id,7);return {url:'https://ircc-services.canada.ca/2/ast-search'};};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:7},{tab:{id:99},url:'chrome-extension://test/popup.html'})).stage,'form','Extension views address the Tracker tab, not their own container tab');
+}
+// Five-second submission is armed by a visible view and cannot repeat or survive cancellation.
+{
+  async function autoHarness(manualRequired=false){
+    const h=await harness(),api=h.context.chrome;let now=100000,selected='auto-profile',clicks=0;
+    const application={id:'auto-profile',label:'Demo',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-09',country:'China',role:'principalApplicantId',noGivenName:false};
+    h.context.Date=class extends Date{static now(){return now;}};h.url='https://ircc-services.canada.ca/2/ast-search';
+    api.storage.local.get=async()=>({applications:[application],selectedApplicationId:selected});
+    api.tabs.sendMessage=async()=>({requestTracking:true,version:manifest.version});
+    api.scripting={executeScript:async request=>{let result;
+      if(request.func.name==='fillApplication')result=request.args[1]==='prepare'?{ok:true,fields:[]}:{ok:true,manualRequired,message:manualRequired?'请手动选择月份。':'资料已填写'};
+      else if(request.func.name==='submitTrackerSearch'){if(request.args[1]){clicks++;h.url='https://ircc-services.canada.ca/2/ast-otp-verification';}result={ok:true};}
+      else if(request.func.name==='readTrackerSessionState')result={expired:false};
+      return [{result}];}};
+    const sender={url:'chrome-extension://test/popup.html'};
+    await h.sendExtension({action:'fill',tabId:7,applicationId:application.id},sender);
+    const pending=(await h.sendExtension({action:'getContext',tabId:7},sender)).autoSubmit;
+    return {h,pending,clicks:()=>clicks,advance:ms=>now+=ms,switchProfile:()=>selected='another',send:(action,extra={})=>h.sendExtension({action,tabId:7,submissionId:pending?.id,viewId:'view-one',...extra},sender)};
+  }
+  let a=await autoHarness();assert.equal(a.clicks(),0);assert.equal(a.pending.phase,'awaiting');
+  let armed=await a.send('armSearchSubmit');assert.equal(armed.pending.deadline,105000);
+  a.advance(4999);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'No submission before five seconds');
+  a.advance(1);assert.equal((await a.send('commitSearchSubmit')).submitted,true);assert.equal(a.clicks(),1);
+  await a.send('commitSearchSubmit');assert.equal(a.clicks(),1,'Duplicate commits cannot repeat submission');
+  a=await autoHarness();await a.send('armSearchSubmit');assert.equal((await a.send('commitSearchSubmit',{immediate:true})).submitted,true);assert.equal(a.clicks(),1,'Explicit Submit now skips the wait');await a.send('commitSearchSubmit',{immediate:true});assert.equal(a.clicks(),1);
+  a=await autoHarness();await a.send('armSearchSubmit');a.switchProfile();await a.send('commitSearchSubmit',{immediate:true});assert.equal(a.clicks(),0,'Immediate submission retains profile validation');
+  a=await autoHarness();await a.send('armSearchSubmit');await a.send('cancelSearchSubmit');a.advance(6000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.switchProfile();a.advance(5000);assert.equal((await a.send('commitSearchSubmit')).cancelled,true);assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.h.url='https://gc.auth.canada.ca/login';a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0);
+  a=await autoHarness();await a.send('armSearchSubmit');a.advance(5000);await a.send('commitSearchSubmit',{viewId:'reopened-view'});assert.equal(a.clicks(),0,'Reopening a view cannot submit an old elapsed countdown');
+  a=await autoHarness();await a.send('armSearchSubmit');await a.h.send('mailTrackRequest',{applicationNumber:'DEMO0001'});a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'Manual Submit cancels the queued automatic click');
+  a=await autoHarness(true);assert.equal(a.pending,undefined);assert.equal(a.clicks(),0,'Incomplete dropdowns do not start auto-submit');
+  console.log('PASS: five-second minimum, visible-view ownership, cancellation, profile/page changes, manual submission and duplicate suppression.');
 }
 // All four records in one response: no detail/history traversal, no waiting for an unrelated request.
 let app=await harness();assert.equal((await app.send('start')).ok,true);assert.equal(app.reloads,1);await app.hang();await app.respond(wrapped);await app.send('overview',{application:{number:'TEST'},applicants:roster});
@@ -68,7 +202,7 @@ class Element{constructor(tag){this.tag=tag;this.children=[];this.dataset={};thi
 const html=await read('popup.html');const ids=[...html.matchAll(/id="([^"]+)"/g)].map(match=>match[1]);assert.equal(ids.length,new Set(ids).size);assert.ok(!ids.includes('settings'));
 const nodes=new Map(ids.map(id=>[id,new Element(id)]));const intervals=[];
 const popup={URL,Date,document:{getElementById:id=>nodes.get(id),createElement:tag=>new Element(tag)},chrome:{runtime:{getManifest:()=>manifest},storage:{local:{get:async()=>({applications:[]})}},tabs:{query:async()=>[]}},setInterval:fn=>intervals.push(fn)};
-vm.createContext(popup);vm.runInContext(await read('i18n.js'),popup);vm.runInContext(await read('domain.js'),popup);vm.runInContext(await read('popup.js'),popup);
+vm.createContext(popup);vm.runInContext(await read('i18n.js'),popup);vm.runInContext(await read('domain.js'),popup);vm.runInContext(await read('ui-model.js'),popup);vm.runInContext(await read('popup.js'),popup);
 const sample={active:false,status:'completed',application:{number:'TEST'},applicants:roster.map((person,index)=>({...person,relationId:String(index+1),status:'completed',checks:{biometrics:'Completed',medical:'Completed',eligibility:'Completed',background:'In Progress',security:'DO NOT USE CHECKS'},historyLoaded:true,history:index?[]:[...payload(0).history,...history],pendingActions:0})),responses:[],errors:[]};
 popup.renderCapture(sample);let rows=nodes.get('results').children[0].children[1].children;assert.equal(rows.length,8);assert.equal(rows[0].children[5].children[0].textContent,'18');assert.equal(rows[2].children[5].children[0].textContent,'无记录');
 assert.equal(rows[1].hidden,true);const icon=rows[0].children[7].children[0];icon.onclick();assert.equal(rows[1].hidden,false);assert.equal(icon.attributes['aria-expanded'],'true');assert.equal(rows[1].children[0].children[0].children[1].children.length,27);
@@ -97,6 +231,7 @@ const cachedA={...sample,profileId:'A',application:{number:'APP-A',title:'Result
 const cachedB={...sample,profileId:'B',application:{number:'APP-B',title:'Result B'}};
 let cachedBAvailable=false,holdA=false;
 popup.chrome.runtime.sendMessage=async message=>{
+  if(message.action==='openTrackerPage'){navigations++;return {ok:true,tabId:7};}
   if(message.action==='getContext')return {stage:'results'};
   if(message.action==='read'){
     if(message.profileId==='A' && holdA){holdA=false;return new Promise(resolve=>releaseStale=resolve);}
@@ -106,10 +241,10 @@ popup.chrome.runtime.sendMessage=async message=>{
 popup.chrome.storage.local.set=async()=>{};
 popup.chrome.tabs.query=async()=>[{id:7,url:'https://ircc-services.canada.ca/2/ast-details'}];popup.chrome.tabs.get=async()=>({id:7,windowId:1,url:'https://ircc-services.canada.ca/2/ast-details'});
 popup.chrome.tabs.update=async(id,change)=>{if(change.url){assert.equal(change.url,'https://ircc-services.canada.ca/2/ast');navigations++;}};popup.chrome.windows={update:async()=>{}};
-nodes.get('application').value='A';popup.renderCapture(cachedA);nodes.get('application').value='B';await nodes.get('application').onchange();assert.equal(nodes.get('results').children[0].textContent,'暂无结果');assert.equal(nodes.get('export').disabled,true);assert.equal(navigations,1);
+nodes.get('application').value='A';popup.renderCapture(cachedA);nodes.get('application').value='B';await nodes.get('application').onchange();assert.equal(nodes.get('results').children[0].textContent,'暂无结果');assert.equal(nodes.get('queryFooter').hidden,true);assert.equal(navigations,0);
 cachedBAvailable=true;nodes.get('application').value='A';await nodes.get('application').onchange();assert.equal(nodes.get('applicationTitle').textContent,'Result A');
-holdA=true;const staleRead=popup.refreshCapture();nodes.get('application').value='B';await nodes.get('application').onchange();releaseStale(cachedA);await staleRead;assert.equal(nodes.get('applicationTitle').textContent,'Result B');assert.equal(navigations,1);
-await nodes.get('openTracker').onclick();assert.equal(navigations,2,'Open Tracker navigates to the query entry, not just focus');
+holdA=true;const staleRead=popup.refreshCapture();nodes.get('application').value='B';await nodes.get('application').onchange();releaseStale(cachedA);await staleRead;assert.equal(nodes.get('applicationTitle').textContent,'Result B');assert.equal(navigations,0);
+await nodes.get('openTracker').onclick();assert.equal(navigations,1,'Explicit Open Tracker navigates; selecting profiles does not navigate');
 console.log('PASS: per-profile cache, wrong-application isolation, empty-profile reopening, rapid-switch stale response suppression, and Open Tracker navigation.');
 
 // Worker completion persists comparison once; opening or polling never acknowledges it.
@@ -147,3 +282,19 @@ await popup.I18n.setLanguage('zh');assert.equal(nodes.get('output').textContent,
 assert.equal(nodes.get('code').value,'482791');
 assert.ok(nodes.get('results').children[0].children[0].children[0].children[1].textContent.includes('Biometrics'));
 console.log('PASS: live bilingual result/status rendering, language-switch error updates, intact manual OTP and untouched IRCC payloads.');
+{
+  const original=popup.chrome.runtime.sendMessage;let clicking=false,opens=0,handoffs=0;
+  vm.runInContext('queryWindowId=1',popup);
+  popup.chrome.runtime.sendMessage=async message=>{
+    if(message.action==='openTrackerPage'){assert.ok(clicking);assert.equal(message.windowId,1);handoffs++;return {ok:true,tabId:7};}
+    return original(message);
+  };
+  popup.chrome.sidePanel={open:async options=>{assert.ok(clicking,'Side panel starts inside click, before any await');assert.equal(options.windowId,1);opens++;}};
+  clicking=true;let pending=nodes.get('openTracker').onclick();clicking=false;await pending;
+  assert.equal(opens,1);assert.equal(handoffs,1);
+  popup.chrome.sidePanel.open=async()=>{throw Error('Gesture rejected');};
+  clicking=true;pending=nodes.get('openTracker').onclick();clicking=false;await pending;
+  assert.equal(handoffs,2);assert.match(nodes.get('output').textContent,/侧栏未能打开/);
+  popup.chrome.runtime.sendMessage=original;delete popup.chrome.sidePanel;
+  console.log('PASS: synchronous side-panel gesture, worker navigation handoff, current-window isolation and manual fallback.');
+}

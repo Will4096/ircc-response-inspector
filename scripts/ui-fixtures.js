@@ -1,0 +1,50 @@
+// SYNTHETIC PREVIEW ONLY. This file is not included in the extension runtime.
+(()=>{
+  if(window.parent!==window&&window.parent.chrome?.runtime?.id==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'){window.chrome=window.parent.chrome;return;}
+  const query=new URLSearchParams(location.search),listeners=[];
+  const profiles=[{id:'demo-a',label:'本人 · PR 申请',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-01',country:'China',role:'principalApplicantId',noGivenName:false},{id:'demo-b',label:'家人 · 工签申请',surname:'Example',givenName:'Applicant',uci:'87654321',applicationNumber:'DEMO0002',birthDate:'1991-02-02',country:'China',role:'principalApplicantId',noGivenName:false}];
+  const empty=query.has('empty'),mail=query.get('mail'),gmail=mail==='reauth';
+  let data={uiLanguage:query.get('lang')==='en'?'en':'zh',applications:empty?[]:profiles,selectedApplicationId:empty?'':'demo-a',autoFill:true,mailAssist:mail?{enabled:true,provider:gmail?'gmail':'163',email:gmail?'example@gmail.com':'example@163.com',clientId:gmail?'demo-client.apps.googleusercontent.com':''}:{enabled:false}};
+  let stage=query.get('stage') || 'results';
+  data.mailAutoVerify=query.has('autoVerify');let verifyAuto=null,verifyPaused=false;window.__mailVerifyCount=0;
+  const authHidden=query.get('auth')==='hidden';let authGranted=!authHidden;
+  if(authHidden)stage='access';
+  const countdown=query.has('countdown');let autoPending=countdown?{id:'synthetic-countdown',profileId:'demo-a',phase:'awaiting',deadline:null,createdAt:Date.now()}:null;
+  window.__autoSubmitCount=0;if(countdown)stage='form';
+  let capture={active:false,status:'completed',finishedAt:'2026-10-29T12:00:00Z',application:{number:'DEMO0001',title:'申请人 A · Application',status:'In Progress'},applicants:['申请人 A','申请人 B'].map((name,index)=>({id:'person'+index,relationId:String(index),name,role:index?'DEP':'PA',status:'completed',checks:{biometrics:'Completed',medical:'Completed',eligibility:'Completed',background:'In Progress'},historyLoaded:true,history:[{key:index?'Medical':'Security',actStatus:index?'Completed':'17',dateCreated:index?'2026-10-29':'2026-10-28',text:'虚构记录 · Demo record'}],pendingActions:0})),responses:[],errors:[],comparison:{status:'changed',previousAt:'2026-10-28T12:00:00Z',changes:[{person:'申请人 A',type:'history',added:1,label:'History',removed:0}],people:{person0:[{type:'history',added:1,newIndices:[0]}]}}};
+  if(stage==='results')capture.application.irccUpdatedAt={value:'2026-11-02',source:'IRCC response',field:'lastUpdatedDate'};
+  if(stage!=='results' || empty)capture={active:false,status:'idle',application:{},applicants:[],responses:[]};
+  if(countdown)capture.status='countdown';
+  if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
+  const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
+  const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
+  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'4.2.0'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+    switch(message.action){
+      case 'armSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId)return {cancelled:true};if(autoPending.phase==='awaiting'){autoPending={...autoPending,phase:'armed',viewId:message.viewId,deadline:Date.now()+5000};}return {pending:{...autoPending}};
+      case 'cancelSearchSubmit':autoPending=null;capture.status='ready';return {cancelled:true};
+      case 'commitSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId||autoPending.viewId!==message.viewId)return {cancelled:true};if(!message.immediate&&Date.now()<autoPending.deadline)return {pending:{...autoPending}};window.__autoSubmitCount++;autoPending=null;stage='verification';capture.status='submitted';return {submitted:true,message:'查询已提交，正在等待验证码页面。'};
+      case 'resolveTrackerTab':return {tabId:authGranted?1:undefined};
+      case 'openTrackerPage':return !authGranted&&!message.forceNew?{needsAccess:true}:{ok:true,tabId:1};
+      case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
+      case 'mailHelperStatus':return nativeReady?{ok:true,configured}:{error:'mail.helper'};
+      case 'mailSetup163':configured=true;verifiedAt=Date.now();return {ok:true};
+      case 'mailAuthorize':verifiedAt=Date.now();return {ok:true};
+      case 'mailSave':changes({mailAssist:message.config});return {ok:true};
+      case 'mailDisconnect':verifiedAt=null;configured=false;changes({mailAssist:{enabled:false}});return {ok:true,helperCleared:true};
+      case 'clearLocalData':changes({applications:[],autoFill:false,mailAssist:{enabled:false},uiLanguage:'zh'});return {ok:true,helperCleared:true};
+      case 'removeProfile':{const next=data.applications.filter(p=>p.id!==message.profileId);changes({applications:next});return {ok:true,applications:next};}
+      case 'getContext':return {stage,...(query.get('observer')==='missing'?{observerReady:false}:{}),...(autoPending?{autoSubmit:{...autoPending}}:{})};case 'read':return capture;
+      case 'mailAutoArm':if(!verifyAuto||message.reset)verifyAuto={id:'synthetic-auto-'+Date.now(),viewId:message.viewId,candidateId:'synthetic-mail',deadline:Date.now()+5000};return {auto:{...verifyAuto}};
+      case 'mailAutoDisarm':verifyAuto=null;return {ok:true};
+      case 'mailAutoPause':verifyPaused=true;verifyAuto=null;return {ok:true};
+      case 'mailAutoResume':verifyPaused=false;verifyAuto=null;return {ok:true};
+      case 'mailConfirm':case 'mailAutoCommit':window.__mailVerifyCount++;verifyPaused=true;verifyAuto=null;stage='results';capture.status='completed';return {ok:true};
+      case 'mailCheck':
+      case 'mailPoll':return data.mailAssist.enabled?(query.get('poll')==='shared'?{status:'candidates',requestId:'synthetic-request',profileId:'demo-a',autoEnabled:data.mailAutoVerify,autoPaused:verifyPaused,auto:verifyAuto?{...verifyAuto}:null,candidates:[{id:'synthetic-mail',code:'123456',purpose:'TrackerAccountConfirmation',receivedAt:1}]}:{status:query.get('poll')||'waiting',checkedAt:Date.now(),diagnostic:{checked:0,rejected:{}}}):{status:'off'};
+      case 'stop':capture={...capture,active:false,status:'stopped'};return {ok:true};
+      case 'fill':capture={...capture,status:'ready'};return {ok:true,message:'请确认申请信息，点击 Submit 后继续。'};
+      case 'start':case 'verify':capture={...capture,active:true,status:'capturing'};setTimeout(()=>{capture={...capture,active:false,status:'completed'};stage='results';},900);return {ok:true};
+      default:return {ok:true};
+    }
+  }},tabs:{query:async()=>empty?[]:[{id:1,windowId:1,active:true,...(!authGranted?{}:{url:authHidden?'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic':'https://ircc-services.canada.ca/2/ast-details'})}],get:async()=>({id:1,windowId:1,...(!authGranted?{}:{url:authHidden?'https://gc.auth.canada.ca/auth/gceab/p/l/authenticate?reqId=synthetic':'https://ircc-services.canada.ca/2/ast-details'})}),update:async()=>{},create:async({url})=>{if(url==='options.html')location.href=url;return {id:1};}},windows:{getCurrent:async()=>({id:1}),update:async()=>{}}};
+})();
