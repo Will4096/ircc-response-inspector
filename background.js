@@ -46,6 +46,41 @@ async function findTrackerTab(windowId,tabId){
   const tabs=await chrome.tabs.query({windowId,url:origins}),found=tabs.find(accept);
   if(found)await rememberTrackerTab(found);return found;
 }
+const profileSwitches=new Map();
+async function trackerProfileMismatch(id,profileId){
+  if(!profileId)return false;
+  const keys=['tracker:profileSwitch:'+id,'capture:'+id,'tracker:submission:'+id];
+  const stored=await chrome.storage.session.get(keys);
+  const pending=stored[keys[0]];
+  if(pending?.profileId===profileId)return true;
+  const owner=stored[keys[2]]?.profileId||sessions.get(id)?.profileId||stored[keys[1]]?.profileId;
+  return !!owner&&owner!==profileId;
+}
+async function switchTrackerProfile(message){
+  const selected=await chrome.storage.local.get(['selectedApplicationId','applications']);
+  if(selected.selectedApplicationId!==message.profileId||!selected.applications?.some(p=>p.id===message.profileId))throw Error('所选申请已变化，请重新填写。');
+  const tab=await findTrackerTab(message.windowId,message.tabId);
+  if(!tab)return {ok:true};
+  const existing=profileSwitches.get(tab.id);
+  if(existing?.profileId===message.profileId)return existing.promise;
+  const work=(async()=>{
+    await chrome.storage.session.set({['tracker:profileSwitch:'+tab.id]:{profileId:message.profileId}});
+    await cancelSearchSubmit(tab.id);await mailCancel(tab.id);
+    if(sessions.get(tab.id)?.active)await finish(tab.id,'stopped','已切换申请，旧查询已停止。');
+    await chrome.storage.session.remove(['pageNotice:'+tab.id,'fillIntent:'+tab.id,'tracker:submission:'+tab.id]);
+    if((await chrome.storage.local.get('selectedApplicationId')).selectedApplicationId!==message.profileId)return {ok:true};
+    const current=await chrome.tabs.get(tab.id);
+    if(current.windowId!==message.windowId||!trackerRelevant(current.url))return {ok:true,tabId:tab.id};
+    let signedOut=false;
+    if(allowed(current.url)&&['/2/ast-details','/2/ast-view-application','/2/ast-history','/2/ast-otp-verification'].includes(new URL(current.url).pathname)){
+      try{const result=await chrome.scripting.executeScript({target:{tabId:tab.id},func:leaveTrackerApplication});signedOut=result[0]?.result?.clicked===true;}catch{}
+    }
+    if(!signedOut)await chrome.tabs.update(tab.id,{url:'https://ircc-services.canada.ca/2/ast'});
+    await rememberTrackerTab(tab);return {ok:true,tabId:tab.id};
+  })();
+  const entry={profileId:message.profileId,promise:work};profileSwitches.set(tab.id,entry);
+  try{return await work;}finally{if(profileSwitches.get(tab.id)===entry)profileSwitches.delete(tab.id);}
+}
 let backupRestoring=false;
 // Use Chrome's persistent host from the very first toolbar click. A transient
 // action popup can disappear before handing control over to a side panel.
@@ -186,7 +221,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {cancelled:true,message:/[\u3400-\u9fff]/.test(error.message)?error.message:'自动提交结果尚未确认，请查看官网提示，不会自动重复提交。'};
       }
     }
-    if(backupRestoring&&['restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
+    if(backupRestoring&&['switchTrackerProfile','restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
     if(message.action==='restoreBackup'){
       if(!mailExtensionSender(sender))throw Error('backup.permission');
       const data=Backup.clean(message.data);
@@ -211,6 +246,15 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {ok:true};
       }finally{backupRestoring=false;}
     }
+    if(message.action==='switchTrackerProfile'){
+      if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
+      return switchTrackerProfile(message);
+    }
+    if(['start','verify','mailConfirm','mailAutoCommit'].includes(message.action)){
+      const selected=await chrome.storage.local.get('selectedApplicationId');
+      const profile=message.profileId||selected.selectedApplicationId;
+      if(profile!==selected.selectedApplicationId||await trackerProfileMismatch(id,profile))throw Error('已切换申请，请先在 Tracker 重新登录并提交当前申请。');
+    }
     if(message.action==='resolveTrackerTab'){
       if(!mailExtensionSender(sender))throw Error('请从扩展页面操作。');
       const tab=await findTrackerTab(message.windowId,message.tabId);return {tabId:tab?.id};
@@ -233,6 +277,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
       const code=message.action==='mailAutoCommit'?await mailAutoControl(id,message):await mailTake(id,message);
       message={...message,action:'verify',code};
     }else if(message.action==='mailTrackRequest'&&mailTrackerSender(sender)&&new URL(sender.url).pathname==='/2/ast-search'){
+      const selection=await chrome.storage.local.get(['applications','selectedApplicationId']);
+      const profile=selection.applications?.find(p=>p.id===selection.selectedApplicationId);
+      if(profile&&normalizeApplicationNumber(profile.applicationNumber)===normalizeApplicationNumber(message.applicationNumber)&&message.applicationNumber){
+        await chrome.storage.session.set({['tracker:submission:'+id]:{profileId:profile.id}});
+        await chrome.storage.session.remove('tracker:profileSwitch:'+id);
+      }
       const cancellation=cancelSearchSubmit(id),tracking=mailHandle(message,sender);await cancellation;return tracking;
     }else if(String(message.action).startsWith('mail'))return mailHandle(message,sender);
     if(message.action==='clearLocalData' || message.action==='removeProfile'){
@@ -262,6 +312,9 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         if(sessions.get(id)?.active)await finish(id,'failed',expired?'Tracker 登录已超时，请重新登录。':'登录状态已变化，请在官网完成登录。');
         return {stage:expired?'expired':'login',tabId:id};
       }
+      const selectedProfile=(await chrome.storage.local.get('selectedApplicationId')).selectedApplicationId;
+      if(allowed(tab.url)&&['/2/ast','/2/ast-search'].includes(url.pathname))await chrome.storage.session.remove('tracker:profileSwitch:'+id);
+      else if(allowed(tab.url)&&await trackerProfileMismatch(id,selectedProfile))return {stage:'profileSwitch',tabId:id};
       const stages={'/2/ast':'role','/2/ast-search':'form','/2/ast-otp-verification':'verification','/2/ast-details':'results','/2/ast-view-application':'results','/2/ast-history':'results'};
       let expired=false;
       if(allowed(tab.url)&&tab.status!=='loading'&&chrome.scripting?.executeScript){
@@ -578,7 +631,7 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
   finally{state.reading--;}
 });
 chrome.debugger.onDetach.addListener(source => { const state=sessions.get(source.tabId); if(state?.active)void finish(source.tabId,'failed','查询连接已断开，请重新查询。'); });
-chrome.tabs.onRemoved.addListener(id => {verificationLocks.delete(id);const state=sessions.get(id);if(state){clearTimeout(state.timeout);clearTimeout(state.settle);}sessions.delete(id);void chrome.storage.session.remove('capture:'+id);});
+chrome.tabs.onRemoved.addListener(id => {verificationLocks.delete(id);const state=sessions.get(id);if(state){clearTimeout(state.timeout);clearTimeout(state.settle);}sessions.delete(id);void chrome.storage.session.remove(['capture:'+id,'tracker:submission:'+id,'tracker:profileSwitch:'+id]);});
 
 chrome.tabs.onUpdated?.addListener((id,change)=>{
   if(change.url && sessions.get(id)?.active && !allowed(change.url))void finish(id,'failed','查询页面已离开 Tracker，已停止。');
@@ -589,3 +642,20 @@ chrome.tabs.onRemoved.addListener((id,info)=>{if(info?.windowId!==undefined)void
 chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&(changes.selectedApplicationId||changes.applications||(changes.autoFill&&changes.autoFill.newValue===false)))for(const [id,p] of [...searchSubmissions])void cancelSearchSubmit(id,p.id).catch(()=>{});});
 chrome.tabs.onUpdated?.addListener((id,change)=>{if(change.url){try{if(!allowed(change.url)||new URL(change.url).pathname!=='/2/ast-search')void cancelSearchSubmit(id).catch(()=>{});}catch{}}});
 chrome.tabs.onRemoved.addListener(id=>void cancelSearchSubmit(id).catch(()=>{}));
+
+// Invalidate the old page even when the query view is closed. Navigation remains
+// owned by the current-window UI; never redirect another browser window here.
+chrome.storage.onChanged.addListener((changes,area)=>{
+  const change=changes.selectedApplicationId;
+  if(area!=='local'||!change?.oldValue||!change.newValue||change.oldValue===change.newValue)return;
+  void (async()=>{
+    const stored=await chrome.storage.session.get(null);
+    const ids=new Set([...sessions.keys(),...Object.keys(stored).filter(key=>/^capture:[0-9]+$/.test(key)).map(key=>Number(key.slice(8))),...Object.entries(stored).filter(([key])=>key.startsWith('tracker:window:')).map(([,value])=>value.tabId)]);
+    for(const id of ids){
+      if((await chrome.storage.local.get('selectedApplicationId')).selectedApplicationId!==change.newValue)return;
+      await chrome.storage.session.set({['tracker:profileSwitch:'+id]:{profileId:change.newValue}});
+      await cancelSearchSubmit(id);await mailCancel(id);await chrome.storage.session.remove('tracker:submission:'+id);
+      if(sessions.get(id)?.active)await finish(id,'stopped','已切换申请，旧查询已停止。');
+    }
+  })().catch(()=>{});
+});

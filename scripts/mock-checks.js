@@ -164,6 +164,12 @@
     const authEnglish=w.document.querySelector('iframe[data-view="popup.html"]').contentDocument;
     assert(authEnglish.getElementById('openTracker').textContent==='Restart sign-in'&&authEnglish.getElementById('reloginTracker').hidden&&authEnglish.documentElement.scrollWidth===authEnglish.documentElement.clientWidth,'English invalid session shows one clear restart action without overflow');
     w=await load('/workspace.html?surface=panel&stage=login');await settle();await settle();
+    w=await load('/workspace.html?surface=panel&stage=results');await settle();await settle();
+    const profileView=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;
+    const profileSelect=profileView.document.getElementById('application');profileSelect.value='demo-b';profileSelect.dispatchEvent(new profileView.Event('change'));await settle();await settle();
+    assert(w.__profileSwitchCount===1,'selecting another profile restarts Tracker once');
+    assert(profileView.document.getElementById('entryTitle').textContent.includes('已切换申请'),'old results present a clear restart state after profile switch');
+    assert(profileView.document.getElementById('resultActions').hidden&&profileView.document.getElementById('verifyForm').hidden,'old profile cannot be queried or verified');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

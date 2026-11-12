@@ -298,3 +298,57 @@ console.log('PASS: live bilingual result/status rendering, language-switch error
   popup.chrome.runtime.sendMessage=original;delete popup.chrome.sidePanel;
   console.log('PASS: synchronous side-panel gesture, worker navigation handoff, current-window isolation and manual fallback.');
 }
+
+// A selection change must reset the real Tracker context, not only cached rows.
+{
+  const h=await harness(),api=h.context.chrome,store={},moves=[];
+  let selected='b',page='https://ircc-services.canada.ca/2/ast-details',signouts=0;
+  const profiles=[{id:'a',applicationNumber:'DEMO-A'},{id:'b',applicationNumber:'DEMO-B'}];
+  store['capture:7']={profileId:'a',application:{number:'DEMO-A'},active:false,status:'completed'};
+  api.storage.local.get=async()=>({selectedApplicationId:selected,applications:profiles});
+  api.storage.session.get=async keys=>keys===null?{...store}:Object.fromEntries((Array.isArray(keys)?keys:[keys]).filter(key=>key in store).map(key=>[key,store[key]]));
+  api.storage.session.set=async values=>Object.assign(store,values);
+  api.storage.session.remove=async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete store[key];};
+  api.tabs.get=async()=>({id:7,windowId:1,url:page,status:'complete'});
+  api.tabs.query=async()=>[];
+  api.tabs.update=async(id,change)=>{moves.push({id,...change});if(change.url)page=change.url;return {id,windowId:1,url:page};};
+  api.permissions={contains:async()=>true};
+  api.scripting={executeScript:async options=>{if(options.func===h.context.leaveTrackerApplication){signouts++;return [{result:{clicked:true}}];}return [{result:{expired:false}}];}};
+  const sender={url:'chrome-extension://test/popup.html'};
+  assert.equal((await h.sendExtension({action:'getContext',tabId:7,profileId:'b'},sender)).stage,'profileSwitch');
+  for(const action of ['start','verify','mailConfirm','mailAutoCommit'])assert.match((await h.sendExtension({action,tabId:7,profileId:'b',code:'123456'},sender)).error,/已切换申请/);
+  await h.sendExtension({action:'switchTrackerProfile',windowId:1,tabId:7,profileId:'b'},sender);
+  assert.equal(signouts,1);assert.equal(moves.length,0,'Visible official sign-out is used before any fallback navigation');
+  assert.equal(store['tracker:profileSwitch:7'].profileId,'b');
+  assert.equal(store['capture:7'].profileId,'a','Old profile records stay owned by the old profile');
+  assert.equal((await h.sendExtension({action:'getContext',tabId:7,profileId:'b'},sender)).stage,'profileSwitch','Old results cannot be reused while sign-out navigation is pending');
+  page='https://gc.auth.canada.ca/auth/gceab/p/l/authenticate';
+  assert.equal((await h.sendExtension({action:'getContext',tabId:7},sender)).stage,'login');
+  page='https://ircc-services.canada.ca/2/ast-search';
+  await h.sendExtension({action:'getContext',tabId:7},sender);
+  assert.equal(store['tracker:profileSwitch:7'],undefined,'Fresh query form ends the transition');
+  api.scripting.executeScript=async()=>[{result:{clicked:false}}];page='https://ircc-services.canada.ca/2/ast-details';
+  await h.sendExtension({action:'switchTrackerProfile',windowId:1,tabId:7,profileId:'b'},sender);
+  assert.equal(moves.at(-1).id,7);assert.equal(moves.at(-1).url,'https://ircc-services.canada.ca/2/ast','Fallback reuses this tab, never creates another');
+  page='https://ircc-services.canada.ca/2/ast-search';
+  await h.sendExtension({action:'getContext',tabId:7},sender);
+  h.url=page;await h.send('mailTrackRequest',{applicationNumber:'DEMO-B'});
+  assert.equal(store['tracker:submission:7'].profileId,'b','Manual Submit binds the new profile even when mailbox assistance is off');
+  assert.equal(await h.context.trackerProfileMismatch(7,'b'),false);
+  assert.equal(await h.context.trackerProfileMismatch(7,'a'),true);
+  selected='a';assert.match((await h.sendExtension({action:'switchTrackerProfile',windowId:1,tabId:7,profileId:'b'},sender)).error,/所选申请已变化/);
+  const before=moves.length;selected='b';api.tabs.get=async()=>({id:7,windowId:2,url:page});
+  await h.sendExtension({action:'switchTrackerProfile',windowId:1,tabId:7,profileId:'b'},sender);
+  assert.equal(moves.length,before,'A different browser window is never redirected');
+  console.log('PASS: profile switching blocks old results/OTP, signs out when available, preserves caches, resumes via fresh form and reuses only this window.');
+}
+{
+  let clicked=0;const link={innerText:'Sign out',tagName:'A',getAttribute:()=>'/logout',getClientRects:()=>[{}],click:()=>clicked++};
+  const context={URL,location:{origin:'https://ircc-services.canada.ca',href:'https://ircc-services.canada.ca/2/ast-details'},document:{querySelectorAll:()=>[link]}};
+  vm.createContext(context);vm.runInContext(await read('scanner.js'),context);
+  assert.equal(context.leaveTrackerApplication().clicked,true);assert.equal(clicked,1);
+  context.document.querySelectorAll=()=>[link,link];assert.equal(context.leaveTrackerApplication().clicked,false);
+  context.document.querySelectorAll=()=>[{...link,getAttribute:()=> 'https://unrelated.example/logout'}];assert.equal(context.leaveTrackerApplication().clicked,false);
+  context.location.origin='https://gc.auth.canada.ca';assert.equal(context.leaveTrackerApplication().clicked,false);
+  console.log('PASS: sign-out action requires a unique visible enabled official Tracker control.');
+}

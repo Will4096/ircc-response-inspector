@@ -3,6 +3,7 @@ var UIModel={
   query(stage,data,hasProfile){
     const state={step:1,title:'开始查询',help:'选择申请后，打开 Tracker 完成登录。',label:'待开始',open:false,fill:false,verify:false,capture:false,stop:false,add:!hasProfile,openText:'打开 Tracker'};
     if(!hasProfile)return {...state,step:0,title:'先添加一份申请资料',help:'保存 Tracker 查询需要的信息，之后可重复使用。',label:'首次使用'};
+    if(stage==='profileSwitch')return {...state,title:'已切换申请，请重新开始 Tracker 查询',help:'当前官网页面仍属于上一份申请。重新登录并提交当前申请后才能继续。',label:'需要重新查询',open:true,openText:'重新开始登录'};
     if(stage==='access')return {...state,title:'先关联当前 Tracker 登录页',help:'Chrome 尚未允许识别认证页地址。允许后将关联原标签页，不读取登录表单。',label:'需要页面授权',open:true,newTab:true,openText:'识别当前登录页'};
     if(stage==='expired')return {...state,title:'登录会话已失效',help:'官网提示当前登录已失效，请重新开始登录。申请资料和查询记录会保留。',label:'需要重新登录',open:true,openText:'重新开始登录'};
     if(stage==='login')return {...state,title:'请在官网完成登录',help:'在 Tracker 官网选择登录方式并完成登录。若页面提示会话失效，可重新开始登录。',label:'待登录',open:true,relogin:true,openText:'前往登录页'};

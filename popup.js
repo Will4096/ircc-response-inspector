@@ -211,6 +211,13 @@ async function loadApplications(){
   else if(select.value)await chrome.storage.local.set({selectedApplicationId:select.value});
 }
 async function saveSelection(){await chrome.storage.local.set({selectedApplicationId:$('application').value});}
+async function resetTrackerForSelection(profileId){
+  if(!profileId)return;
+  const windowId=queryWindowId??(await chrome.windows.getCurrent()).id;
+  const result=await chrome.runtime.sendMessage({action:'switchTrackerProfile',profileId,tabId:targetTabId,windowId});
+  if(result?.error)throw Error(result.error);
+  if(result?.tabId!==undefined)targetTabId=result.tabId;
+}
 $('application').onchange=async()=>{
   const revision=++profileRevision;expandedPeople.clear();lastSnapshot='';setOutput('');$('code').value='';
   renderCapture({active:false,status:'idle',application:{},applicants:[],responses:[]});
@@ -308,10 +315,20 @@ setInterval(()=>{void (async()=>{
 I18n.onChange(()=>{for(const option of $('application').options || [])if(option.value==='')option.textContent=t('选择申请');lastSnapshot='';if(displayedCapture)renderCapture(displayedCapture);setOutput(outputSource);});
 
 // Keep the selected profile and labels current when another extension page saves or clears data.
-let profileReloading=false;
+let profileReloading=false,profileReloadPending=false,profileResetPending=false;
 chrome.storage.onChanged?.addListener(async(changes,area)=>{
-  if(area!=='local' || profileReloading || !(changes.applications || changes.selectedApplicationId))return;
+  if(area!=='local'||!(changes.applications||changes.selectedApplicationId))return;
+  profileReloadPending=true;
+  const selection=changes.selectedApplicationId;
+  if(selection?.oldValue&&selection.newValue&&selection.oldValue!==selection.newValue)profileResetPending=true;
+  if(profileReloading)return;
   profileReloading=true;profileRevision++;expandedPeople.clear();$('code').value='';
-  try{await loadApplications();lastSnapshot='';await refreshCapture();}catch(error){setOutput(error.message);}
+  try{
+    do{
+      profileReloadPending=false;await loadApplications();
+      if(profileResetPending){profileResetPending=false;await resetTrackerForSelection($('application').value);}
+      lastSnapshot='';await refreshCapture();
+    }while(profileReloadPending);
+  }catch(error){setOutput(error.message);}
   finally{profileReloading=false;}
 });

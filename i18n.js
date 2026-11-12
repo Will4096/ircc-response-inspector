@@ -4,6 +4,11 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+    '已切换申请，请重新开始 Tracker 查询':'Profile changed; restart the Tracker query',
+    '当前官网页面仍属于上一份申请。重新登录并提交当前申请后才能继续。':'Tracker still shows the previous application. Sign in again and submit the selected application to continue.',
+    '需要重新查询':'Restart required',
+    '已切换申请，旧查询已停止。':'Profile changed; the previous query has stopped.',
+    '已切换申请，请先在 Tracker 重新登录并提交当前申请。':'Profile changed. Sign in again on Tracker and submit the selected application first.',
     '自动提交结果尚未确认，请查看官网提示，不会自动重复提交。':'Submission could not be confirmed. Check Tracker; it will not be submitted again automatically.',
     '所选申请已变化，请重新填写。':'The selected profile changed. Fill the form again.',
     '资料已填写':'Details filled',
