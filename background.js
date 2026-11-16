@@ -221,7 +221,26 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         return {cancelled:true,message:/[\u3400-\u9fff]/.test(error.message)?error.message:'自动提交结果尚未确认，请查看官网提示，不会自动重复提交。'};
       }
     }
-    if(backupRestoring&&['switchTrackerProfile','restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
+    if(backupRestoring&&['importProfiles','switchTrackerProfile','restoreBackup','start','verify','fill','openTrackerPage','mailConfirm','mailAutoArm','mailAutoResume','mailAutoCommit'].includes(message.action))throw Error('backup.busy');
+    if(message.action==='importProfiles'){
+      if(!mailExtensionSender(sender))throw Error('backup.permission');
+      const data=DataTransferCore.profiles(message.data);
+      if([...sessions.values()].some(s=>s.active)||verificationLocks.size||searchSubmissions.size)throw Error('backup.busy');
+      backupRestoring=true;
+      try{
+        const [local,session]=await Promise.all([chrome.storage.local.get(null),chrome.storage.session.get(null)]);
+        const applications=DataTransferCore.merge(local.applications||[],data);
+        const changed=new Set(data.applications.filter(p=>{const old=local.applications?.find(q=>q.id===p.id);return old&&JSON.stringify(old)!==JSON.stringify(p);}).map(p=>p.id));
+        const nextLocal={applications,selectedApplicationId:applications.some(p=>p.id===local.selectedApplicationId)?local.selectedApplicationId:applications[0]?.id||''},nextSession={};
+        for(const key of Object.keys(local))if((key.startsWith('comparison:profile:')||key.startsWith('mailPending:'))&&changed.has(key.slice(key.indexOf(':')+1).replace(/^profile:/,'')))nextLocal[key]=null;
+        for(const [key,value] of Object.entries(session))if(((key.startsWith('capture:')||key.startsWith('pageNotice:')||key.startsWith('autoSubmit:')||key.startsWith('tracker:submission:')||key.startsWith('tracker:profileSwitch:'))&&changed.has(value?.profileId))||(key.startsWith('fillIntent:')&&changed.has(value)))nextSession[key]=null;
+        for(const [key,value] of Object.entries(session))if(/^capture:[0-9]+$/.test(key)&&changed.has(value?.profileId))nextSession['tracker:profileSwitch:'+key.slice(8)]={profileId:value.profileId};
+        await mailCancelAll();
+        try{await chrome.storage.session.set(nextSession);await chrome.storage.local.set(nextLocal);for(const [id,state] of sessions)if(changed.has(state.profileId))sessions.delete(id);}
+        catch{await chrome.storage.session.set(Object.fromEntries(Object.keys(nextSession).map(k=>[k,session[k]??null])));await chrome.storage.local.set(Object.fromEntries(Object.keys(nextLocal).map(k=>[k,local[k]??null])));throw Error('backup.write');}
+        return {ok:true};
+      }finally{backupRestoring=false;}
+    }
     if(message.action==='restoreBackup'){
       if(!mailExtensionSender(sender))throw Error('backup.permission');
       const data=Backup.clean(message.data);

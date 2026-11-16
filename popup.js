@@ -320,6 +320,7 @@ chrome.storage.onChanged?.addListener(async(changes,area)=>{
   if(area!=='local'||!(changes.applications||changes.selectedApplicationId))return;
   profileReloadPending=true;
   const selection=changes.selectedApplicationId;
+  if(changes.applications){const id=$('application').value,old=changes.applications.oldValue?.find(p=>p.id===id),next=changes.applications.newValue?.find(p=>p.id===id);if(old&&next&&JSON.stringify(old)!==JSON.stringify(next))profileResetPending=true;}
   if(selection?.oldValue&&selection.newValue&&selection.oldValue!==selection.newValue)profileResetPending=true;
   if(profileReloading)return;
   profileReloading=true;profileRevision++;expandedPeople.clear();$('code').value='';

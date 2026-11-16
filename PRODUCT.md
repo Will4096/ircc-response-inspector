@@ -171,3 +171,5 @@
 按用户明确修改的口径，顶部最后更新从所有申请人 History 的最新日期取最大值，并标明 History 来源；每位申请人行在姓名下方显示自己的最后更新时间。使用 dateCreated / date 等事件日期，不使用 dateLoaded / 查询时间，不依赖数组顺序，不改动原始 History 或比较判定。日期缺失显示未获取；日期精度和时区处理保持来源信息。原显式 application 更新时间元数据不再替代此展示。
 
 - Switching the selected profile stops the old query and mailbox request and restarts the existing current-window Tracker tab, using its visible official sign-out action when available. A persisted per-tab transition blocks old results/OTP submissions until a fresh login/query form is reached. Profile caches remain isolated and retained.
+
+- Data transfer (2026-11-16): two independent settings cards. Profile files are always password-encrypted and contain only saved profiles. Import previews a merge by ID, preserving other profiles, general settings and mailbox connections; changed profiles invalidate their caches/baselines. Legacy encrypted backups supply profiles only. Raw exports use the latest captured query for one selected profile, include partial-query status, support optional encryption and local decrypt-to-JSON without import. Plain exports remain sensitive and must be redacted before sharing.

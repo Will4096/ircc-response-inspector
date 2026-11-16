@@ -352,3 +352,29 @@ console.log('PASS: live bilingual result/status rendering, language-switch error
   context.location.origin='https://gc.auth.canada.ca';assert.equal(context.leaveTrackerApplication().clicked,false);
   console.log('PASS: sign-out action requires a unique visible enabled official Tracker control.');
 }
+
+// Profile import is scoped to profiles, with isolated invalidation and rollback.
+{
+  const h=await harness(),api=h.context.chrome;
+  const a={id:'demo-a',label:'A',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO-A',birthDate:'1990-01-01',country:'China',role:'principalApplicantId',noGivenName:false};
+  const b={...a,id:'demo-b',label:'B',applicationNumber:'DEMO-B'};
+  const local={applications:[a,b],selectedApplicationId:'demo-a',uiLanguage:'en',autoFill:true,mailAssist:{enabled:false},'comparison:profile:demo-a':{profileId:'demo-a'},'comparison:profile:demo-b':{profileId:'demo-b'}};
+  const store={'capture:7':{profileId:'demo-a'},'capture:profile:demo-a':{profileId:'demo-a'},'capture:profile:demo-b':{profileId:'demo-b'}};
+  api.storage.local.get=async()=>({...local});api.storage.local.set=async value=>Object.assign(local,value);
+  api.storage.session.get=async()=>({...store});api.storage.session.set=async value=>Object.assign(store,value);
+  const sender={url:'chrome-extension://test/settings.html'},incoming={format:'ircc-profiles',version:1,applications:[{...a,label:'Updated A'}]};
+  assert.equal((await h.sendExtension({action:'importProfiles',data:incoming},sender)).ok,true);
+  assert.equal(local.applications.length,2);assert.equal(local.applications[0].label,'Updated A');assert.equal(local.applications[1].label,'B');
+  assert.equal(local.selectedApplicationId,'demo-a');assert.equal(local.uiLanguage,'en');assert.equal(local.autoFill,true);assert.equal(local.mailAssist.enabled,false);
+  assert.equal(store['capture:profile:demo-a'],null);assert.equal(store['capture:profile:demo-b'].profileId,'demo-b');
+  assert.equal(local['comparison:profile:demo-a'],null);assert.equal(local['comparison:profile:demo-b'].profileId,'demo-b');
+  assert.equal(store['tracker:profileSwitch:7'].profileId,'demo-a');
+  assert.ok((await h.send('importProfiles',{data:incoming})).error,'Web pages cannot import profiles');
+  vm.runInContext('sessions.set(99,{active:true})',h.context);
+  assert.equal((await h.sendExtension({action:'importProfiles',data:incoming},sender)).error,'backup.busy');vm.runInContext('sessions.clear()',h.context);
+  const before=JSON.stringify(local);let failed=false;
+  api.storage.local.set=async value=>{if(!failed){failed=true;throw Error('synthetic storage failure');}Object.assign(local,value);};
+  assert.equal((await h.sendExtension({action:'importProfiles',data:{...incoming,applications:[{...a,label:'Should roll back'}]}},sender)).error,'backup.write');
+  assert.equal(JSON.stringify(local),before);
+  console.log('PASS: profile import merges only profiles, retains settings/mail/other histories, invalidates changed caches, blocks active capture and restores on write failure.');
+}

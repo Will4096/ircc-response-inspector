@@ -45,14 +45,29 @@
     const data=w.Backup.collect(await w.chrome.storage.local.get(null),await w.chrome.storage.session.get(null));
     // Crypto is tested with real WebCrypto in backup-tests.mjs. Isolate UI state from virtual-time scheduling.
     const encrypted='synthetic encrypted fixture';
-    w.Backup.decrypt=async(text,password)=>{if(password!=='synthetic-backup-password')throw Error('backup.decrypt');return data;};
+    w.DataTransferCore.decryptProfiles=async(text,password)=>{if(password!=='synthetic-backup-password')throw Error('backup.decrypt');return {format:"ircc-profiles",version:1,applications:data.applications};};
     const transfer=new w.DataTransfer();transfer.items.add(new w.File([encrypted],'demo.irccbackup',{type:'application/json'}));
-    let restores=0;const send=w.chrome.runtime.sendMessage;w.chrome.runtime.sendMessage=async message=>{if(message.action==='restoreBackup')restores++;return send(message);};
+    let restores=0;const send=w.chrome.runtime.sendMessage;w.chrome.runtime.sendMessage=async message=>{if(message.action==='importProfiles')restores++;return send(message);};
     $('backupMode').value='import';$('backupMode').dispatchEvent(new w.Event('change'));$('backupFile').files=transfer.files;$('backupPassword').value='synthetic-backup-password';
     await $('backupAction').onclick();assert(!$('backupPreview').hidden&&restores===0,'encrypted import previews before any write');
     $('backupCancel').onclick();assert($('backupPreview').hidden&&restores===0,'cancel does not restore');
     $('backupPassword').value='wrong-password';await $('backupAction').onclick();assert($('backupPreview').hidden&&restores===0,'wrong password cannot restore');
     $('backupPassword').value='synthetic-backup-password';await $('backupAction').onclick();await $('backupConfirm').onclick();assert(restores===1&&$('backupPreview').hidden,'explicit confirmation restores once');
+    w=await load('/settings.html');await settle();
+    assert($('backup').textContent.includes('必须使用密码加密')&&$('rawDataExport').textContent.includes('取消加密'),'two transfer cards explain mandatory profile encryption and optional raw encryption');
+    assert($('rawAction').disabled,'raw export is disabled when no responses have been captured');
+    const sample={profileId:'demo-a',status:'completed',startedAt:'2026-11-16T10:00:00Z',application:{number:'DEMO0001'},responses:[{url:'https://ircc-services.canada.ca/api',json:{otp:'synthetic-secret',history:[{key:'Security',actStatus:'17'}]}}]};
+    let rawStore={'capture:profile:demo-a':sample};w.chrome.storage.session.get=async()=>rawStore;
+    $('rawProfile').onchange();await settle();await settle();assert(!$('rawAction').disabled,'latest raw responses enable export for the selected profile');
+    let downloaded=[],rawBlobs=[];w.URL.createObjectURL=blob=>{rawBlobs.push(blob);return 'blob:synthetic-download';};w.HTMLAnchorElement.prototype.click=function(){downloaded.push(this.download);};
+    $('rawEncrypted').checked=false;$('rawEncrypted').onchange();assert($('rawPasswordArea').hidden,'plain JSON export hides unnecessary password controls');
+    await $('rawAction').onclick();const plain=JSON.parse(await rawBlobs[0].text());
+    assert(downloaded[0].endsWith('.json')&&plain.format==='ircc-raw-query'&&plain.applications===undefined&&plain.responses[0].json.otp==='[REDACTED]'&&plain.responses[0].json.history[0].actStatus==='17','plain raw export preserves Security and removes authentication secrets without exporting profiles');
+    let encryptionCalls=0;w.DataTransferCore.encryptRaw=async()=>{encryptionCalls++;return 'synthetic encrypted raw';};
+    $('rawEncrypted').checked=true;$('rawEncrypted').onchange();$('rawPassword').value='synthetic-password';$('rawRepeat').value='different';await $('rawAction').onclick();
+    assert(encryptionCalls===0&&downloaded.length===1,'mismatched raw encryption passwords prevent download');
+    $('rawRepeat').value='synthetic-password';await $('rawAction').onclick();assert(encryptionCalls===1&&downloaded[1].endsWith('.irccraw')&&$('rawPassword').value==='','optional raw encryption uses its own file type and clears the password');
+    rawStore['capture:7']={...sample,startedAt:'2026-11-16T11:00:00Z',responses:[]};$('rawProfile').onchange();await settle();await settle();assert($('rawAction').disabled,'a newer empty query does not offer an older successful export');
     w=await load('/mail-help.html');assert(w.document.characterSet==='UTF-8'&&w.document.body.textContent.includes('先安装，再连接'),'Chinese help renders as UTF-8 HTML');
     w=await load('/mail-help.en.html');assert(w.document.documentElement.lang==='en','English help is a separate page');
     for(const lang of ['zh','en']){

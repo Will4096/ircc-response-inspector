@@ -19,7 +19,7 @@ This independent tool is not affiliated with IRCC or the Government of Canada. I
 - Preserve History entries and display Security status codes as returned.
 - Compare complete successful checks within the same profile. Failed checks do not replace the baseline.
 - Chinese by default, with English support. The Chinese UI retains official field names such as Surname / Last name and Given name.
-- Import and export password-encrypted backups excluding mailbox credentials and verification codes. Delete individual profiles or clear local data.
+- Import/export profiles with mandatory password encryption. Export the latest raw query responses separately as JSON or optionally password-encrypted files. Mailbox credentials and verification codes are excluded.
 
 ## Install
 
