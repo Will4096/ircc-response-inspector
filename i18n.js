@@ -4,6 +4,14 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+"导出":"Export",
+"导出原始查询数据":"Export raw query data",
+"目标申请：":"Application: ",
+"文件格式":"File format",
+"原始 JSON（不加密）":"Raw JSON (unencrypted)",
+"密码加密文件":"Password-encrypted file",
+"查询或申请已变化，请重新打开导出。":"The query or application changed. Open export again.",
+"导出已取消。":"Export cancelled.",
     "响应数量：":"Responses: ",
     "查询时间：":"Query time: ",
     "最新查询未完成，仅导出已捕获的原始响应。":"The latest query is incomplete. Only captured responses will be exported.",

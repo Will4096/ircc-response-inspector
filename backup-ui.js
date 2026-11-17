@@ -65,13 +65,9 @@
   $('rawAction').onclick=async()=>{
     if(rawBusy)return;rawBusy=true;rawStatus('正在导出原始数据…','busy');
     try{
-      const [local,session]=await Promise.all([chrome.storage.local.get('applications'),chrome.storage.session.get(null)]);
-      const data=DataTransferCore.latestRaw(local,session,$('rawProfile').value),encrypted=$('rawEncrypted').checked;
-      if(encrypted&&$('rawPassword').value!==$('rawRepeat').value)throw Error('backup.repeat');
-      const text=encrypted?await DataTransferCore.encryptRaw(data,$('rawPassword').value):JSON.stringify(data,null,2);
-      if(new TextEncoder().encode(text).length>30*1024*1024)throw Error('backup.size');
-      download(text,'ircc-raw-'+new Date().toISOString().replace(/[:.]/g,'-')+(encrypted?'.irccraw':'.json'));$('rawPassword').value='';$('rawRepeat').value='';rawStatus('原始数据已生成，请在浏览器下载中确认。','success');
-    }catch(error){rawStatus(errors[error.message]||'原始数据导出失败，请重试。','error');}finally{rawBusy=false;renderRaw();}
+      const profileId=$('rawProfile').value;
+      await RawExport.write(profileId,{encrypted:$('rawEncrypted').checked,password:$('rawPassword').value,repeat:$('rawRepeat').value,accept:()=>$('rawProfile').value===profileId});$('rawPassword').value='';$('rawRepeat').value='';rawStatus('原始数据已生成，请在浏览器下载中确认。','success');
+    }catch(error){rawStatus(errors[error.message]||(String(error.message||'').startsWith('export.')?'查询或申请已变化，请重新打开导出。':'原始数据导出失败，请重试。'),'error');}finally{rawBusy=false;renderRaw();}
   };
   $('rawDecryptAction').onclick=async()=>{
     if(rawBusy)return;rawBusy=true;renderRaw();

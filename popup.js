@@ -106,6 +106,7 @@ function renderCapture(data){
   $('capturePanel').hidden=!data.active && !['failed','partial','stopped'].includes(status);$('capturePanel').dataset.state=status;
   $('captureState').textContent=labels[status] || '';
   $('captureReason').textContent=['failed','partial'].includes(status)?msg(data.reason || ''):'';
+  const exportMenu=$('resultExportMenu');if(exportMenu){exportMenu.hidden=!responses.length;if(!responses.length)exportMenu.open=false;}
   $('progress').textContent=people.length?completed+' / '+people.length+t(' 人'):'';
   $('applicationTitle').textContent=data.application?.title || t('申请进度');
   $('applicationNumber').textContent=[data.application?.number,data.application?.status].filter(Boolean).join(' · ');

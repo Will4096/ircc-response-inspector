@@ -52,3 +52,21 @@ await assert.rejects(()=>transfer.decryptProfiles(rawFile,'synthetic-password-20
 await assert.rejects(()=>transfer.decryptRaw(profileFile,'synthetic-password-2026'),/backup.format/);
 await assert.rejects(()=>transfer.decryptRaw(rawFile,'wrong-password'),/backup.decrypt/);
 console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge isolation, latest raw response export, partial/empty queries, redaction and distinct authenticated raw encryption.');
+
+// Both settings and the applicant header use the same export and stale-context checks.
+{
+  let downloads=0,filename='',blob;const rawStore={'capture:profile:demo-a':query};
+  c.Blob=Blob;c.setTimeout=()=>{};c.I18n={t:s=>s};c.document={getElementById:()=>null,createElement:()=>({click(){downloads++;filename=this.download;}})};
+  c.URL=class extends URL{static createObjectURL(value){blob=value;return 'blob:synthetic';}static revokeObjectURL(){}};
+  c.chrome={storage:{local:{get:async()=>local},session:{get:async()=>rawStore}}};
+  vm.runInContext(await fs.readFile(new URL('raw-export.js',import.meta.url),'utf8'),c);
+  await c.RawExport.write('demo-a');assert.equal(downloads,1);assert.ok(filename.endsWith('.json'));assert.equal(JSON.parse(await blob.text()).responses[0].json.otp,'[REDACTED]');
+  await assert.rejects(()=>c.RawExport.write('demo-a',{accept:()=>false}),/export.cancelled/);assert.equal(downloads,1);
+  await c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'});assert.equal(downloads,2);assert.ok(filename.endsWith('.irccraw'));
+  const encrypt=transfer.encryptRaw;let allowed=true;
+  transfer.encryptRaw=async(...args)=>{const text=await encrypt.apply(transfer,args);allowed=false;return text;};
+  await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password',accept:()=>allowed}),/export.cancelled/);assert.equal(downloads,2);
+  transfer.encryptRaw=async(...args)=>{const text=await encrypt.apply(transfer,args);rawStore['capture:profile:demo-a']={...query,startedAt:'2026-11-17T10:00:00Z'};return text;};
+  await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'}),/export.changed/);assert.equal(downloads,2);transfer.encryptRaw=encrypt;
+  console.log('PASS: shared raw export service, plain/encrypted output and no file after cancellation or query changes during encryption.');
+}
