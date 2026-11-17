@@ -4,6 +4,19 @@ globalThis.I18n=(()=>{
   let language='zh',ready;
   const listeners=new Set();
   const english={
+"展示仅供参考；申请状态、补件要求、截止期限及审批结果，以 IRCC 官方账户信息及正式通知为准。":"Display is for reference only. For application status, document requests, deadlines and decisions, rely on your official IRCC account and formal notices.",
+"使用说明与免责声明":"Usage information and disclaimer",
+"本工具仅辅助整理查询结果，不提供移民或法律建议，也不提供加速审批服务。":"This tool only helps organize query results. It does not provide immigration or legal advice or expedited processing services.",
+"非官方身份":"Independent, unofficial tool",
+"本工具由个人独立开发，与 IRCC 或加拿大政府无隶属或背书关系。":"This tool is independently developed and is not affiliated with or endorsed by IRCC or the Government of Canada.",
+"官方信息优先":"Official information takes precedence",
+"展示可能受网站改版、同步延迟、网络或会话状态及解析错误影响，出现延迟、遗漏或不一致。申请状态、补件要求、截止期限及审批结果，以 IRCC 官方账户信息及正式通知为准。重要事项请直接登录官网核实，不要用本工具代替查看官方消息；官方信息之间如有疑问，请向 IRCC 核实。":"Website changes, synchronization delays, network or session conditions and parsing errors can cause delayed, missing or inconsistent displays. Rely on your official IRCC account and formal notices for application status, document requests, deadlines and decisions. Verify important matters on the official website rather than relying on this tool to check messages. Ask IRCC to clarify any conflicting official information.",
+"状态与更新时间":"Statuses and update dates",
+"Security 原始记录不构成安调结论或审批预测；“无记录”只表示本次数据中未找到相关条目。“最后更新”取可见 History 中最近的记录时间，不保证反映 IRCC 内部全部处理活动。":"Raw Security records do not establish a screening conclusion or predict a decision. “No record” only means no matching entry was found in this query. “Last updated” is the most recent date in the visible History and may not reflect every internal IRCC processing activity.",
+"操作与隐私":"Your actions and privacy",
+"仅查询本人或已获合法授权的申请。请自行登录并核对目标申请及提交内容；邮箱辅助和自动验证需自行开启，可暂停或改为手动输入。分享截图或原始 JSON 前请另行脱敏，不要公开密码、验证码或邮箱授权码。":"Only query your own applications or those you are legally authorized to access. Sign in yourself and check the target application and submitted details. Mail assistance and automatic verification are opt-in, with pause and manual entry available. Redact screenshots and raw JSON before sharing; never disclose passwords, verification codes or mailbox app passwords.",
+"责任说明":"Responsibility and statutory rights",
+"本说明不排除或限制适用法律规定不得排除或限制的责任及用户权利。":"This notice does not exclude or limit liability or user rights that cannot be excluded or limited under applicable law.",
 "导出":"Export",
 "导出原始查询数据":"Export raw query data",
 "目标申请：":"Application: ",

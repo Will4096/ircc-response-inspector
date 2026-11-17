@@ -1,6 +1,6 @@
 (async()=>{
   const results=[],report=document.querySelector('#report');
-  const assert=(condition,label)=>{if(!condition)throw Error(label);results.push('PASS '+label);};
+  const assert=(condition,label)=>{if(!condition)throw Error(label);results.push('PASS '+label);report.dataset.lastPassed=label;};
   const frame=document.createElement('iframe');frame.style='width:800px;height:650px;border:0';document.body.append(frame);
   const load=path=>new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('Timed out: '+path)),5000);frame.onload=()=>{clearTimeout(timeout);resolve(frame.contentWindow);};frame.src=path;});
   const settle=()=>new Promise(r=>setTimeout(r,100));
@@ -205,6 +205,22 @@
     assert(w.__profileSwitchCount===1,'selecting another profile restarts Tracker once');
     assert(profileView.document.getElementById('entryTitle').textContent.includes('已切换申请'),'old results present a clear restart state after profile switch');
     assert(profileView.document.getElementById('resultActions').hidden&&profileView.document.getElementById('verifyForm').hidden,'old profile cannot be queried or verified');
+    w=await load('/workspace.html?surface=panel&stage=verification');await settle();await settle();
+    let usageQuery=w.document.querySelector('iframe[data-view="popup.html"]').contentWindow;usageQuery.document.getElementById('code').value='123456';
+    let usageTabs=0;w.chrome.tabs.create=async()=>{usageTabs++;return {id:99};};
+    assert(usageQuery.document.getElementById('officialDataNotice').textContent.includes('以 IRCC 官方账户信息及正式通知为准'),'query page visibly states official information takes precedence');
+    usageQuery.document.querySelector('#officialDataNotice a').click();await settle();await settle();
+    let usageSettings=w.document.querySelector('iframe[data-view="settings.html"]').contentWindow;
+    assert(usageSettings.document.getElementById('usage').open&&usageTabs===0,'usage link expands the existing settings view without opening browser tabs');
+    assert(usageSettings.document.getElementById('usage').textContent.includes('不保证反映 IRCC 内部全部处理活动'),'usage notice explains History time and Security limitations');
+    usageSettings.document.getElementById('usage').open=false;usageSettings.document.getElementById('backupPassword').value='synthetic-unsaved-draft';
+    w.document.querySelector('[data-view="popup.html"]').click();await settle();
+    assert(usageQuery.document.getElementById('code').value==='123456','reading usage information preserves the manual code draft');
+    usageQuery.document.querySelector('#officialDataNotice a').click();await settle();await settle();
+    assert(usageSettings.document.getElementById('usage').open,'repeated deep links reopen the usage disclosure');assert(usageSettings.document.getElementById('backupPassword').value==='synthetic-unsaved-draft','reading the notice preserves unsaved settings drafts');
+    await w.chrome.storage.local.set({uiLanguage:'en'});await settle();
+    assert(usageSettings.document.getElementById('usage').textContent.includes('Official information takes precedence')&&usageSettings.document.documentElement.scrollWidth===usageSettings.document.documentElement.clientWidth,'English usage notice fits a narrow panel');
+    assert(!usageSettings.document.querySelector('#usage input[type="checkbox"]'),'usage notice introduces no mandatory consent checkbox');
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

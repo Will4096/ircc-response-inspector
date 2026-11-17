@@ -6,7 +6,7 @@
     let frame=views.get(page);
     if(!frame){frame=document.createElement('iframe');frame.title=page;frame.dataset.view=page;const url=new URL(page,location.href);url.searchParams.set('surface',document.documentElement.dataset.surface==='panel'?'panel':'page');url.searchParams.set('embedded','1');url.hash=hash;frame.src=url.href;views.set(page,frame);frame.addEventListener('load',()=>frame.contentWindow.postMessage({type:'ircc-workspace-visibility',visible:!frame.hidden},location.origin));document.getElementById('workspaceViews').append(frame);}
     for(const [key,value] of views){value.hidden=key!==page;value.contentWindow?.postMessage({type:'ircc-workspace-visibility',visible:!value.hidden},location.origin);}
-    if(hash)requestAnimationFrame(()=>{try{frame.contentWindow.location.hash=hash;frame.contentDocument?.getElementById(hash.slice(1))?.scrollIntoView();}catch{}});
+    if(hash)try{const target=frame.contentDocument?.getElementById(hash.slice(1));if(target){frame.contentWindow.location.hash=hash;if(target.tagName==='DETAILS')target.open=true;requestAnimationFrame(()=>target.scrollIntoView());}}catch{}
     for(const button of document.querySelectorAll('[data-view]')){if(button.dataset.view===page)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
   }
   for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>show(button.dataset.view);

@@ -20,3 +20,7 @@ document.getElementById('clearData').onclick=async()=>{
 chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;if(changes.autoFill)automatic.checked=!!changes.autoFill.newValue;if(changes.mailAutoVerify)autoVerify.checked=changes.mailAutoVerify.newValue===true;if(changes.uiLanguage)general('已保存');});
 void I18n.init().catch(error=>setMessage(error.message,'error'));
 I18n.onChange(()=>{general(generalSource);message.textContent=msg(messageSource);document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+' · '+t('开发预览');});
+
+// Deep links open the existing Settings disclosure, without a new tab or consent gate.
+function revealUsage(){if(location.hash==='#usage'){const details=document.getElementById('usage');details.open=true;requestAnimationFrame(()=>details.scrollIntoView({block:'start'}));}}
+window.addEventListener('hashchange',revealUsage);revealUsage();
