@@ -1,3 +1,15 @@
+// Only use the website's visible sign-out action; never guess a logout endpoint.
+function leaveTrackerApplication(){
+  if(location.origin!=='https://ircc-services.canada.ca')return {clicked:false};
+  const matches=[...document.querySelectorAll('a,button,input[type="submit"]')].filter(node=>{
+    const label=String(node.innerText||node.textContent||node.value||'').trim();
+    if(!/^(sign out|log out|logout|se déconnecter|déconnexion)$/i.test(label)||node.disabled||node.getAttribute('aria-disabled')==='true'||!node.getClientRects().length)return false;
+    if(node.tagName==='A'){try{const url=new URL(node.getAttribute('href'),location.href);if(url.origin!==location.origin)return false;}catch{return false;}}
+    return true;
+  });
+  if(matches.length!==1)return {clicked:false};
+  matches[0].click();return {clicked:true};
+}
 function readTrackerSessionState(){
   if(['https://gc.auth.canada.ca','https://clegc-gckey.gc.ca'].includes(location.origin)){
     const headings=Array.from(document.querySelectorAll?.('h1')||[]).map(node=>(node.textContent||'').replace(/\s+/g,' ').trim());

@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {webcrypto} from 'node:crypto';
-const c={crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa};vm.createContext(c);
+const c={URL,Date,crypto:webcrypto,TextEncoder,TextDecoder,atob,btoa};vm.createContext(c);
 for(const file of ['profiles.js','privacy-data.js','backup-core.js'])vm.runInContext(await fs.readFile(new URL(file,import.meta.url),'utf8'),c);
 const profile={id:'demo-a',label:'Example',surname:'Example',givenName:'Person',uci:'12345678',applicationNumber:'DEMO0001',birthDate:'1990-01-01',country:'China',role:'principalApplicantId',noGivenName:false,password:'SECRET'};
 const local={applications:[profile],selectedApplicationId:profile.id,uiLanguage:'en',autoFill:true,mailAssist:{email:'secret@example.com'},mailConnection:{password:'MAILSECRET'},'comparison:profile:demo-a':{profileId:'demo-a',application:{number:'DEMO0001'},applicants:[]}};
@@ -21,3 +21,52 @@ const duplicate=structuredClone(data);duplicate.applications.push(duplicate.appl
 const wrong=structuredClone(data);wrong.captures['demo-a'].application.number='OTHER';assert.throws(()=>c.Backup.clean(wrong),/backup.format/);
 const allowedRole=structuredClone(data);allowedRole.applications[0].role='sponsorId';assert.doesNotThrow(()=>c.Backup.clean(allowedRole));
 console.log('PASS: encrypted backup roundtrip, random salt/IV, authentication failure/tampering, schema/profile isolation, raw Security retention and exclusion of mailbox secrets.');
+
+const transfer=c.DataTransferCore,profileData=transfer.profiles({format:'ircc-profiles',version:1,applications:[profile]});
+assert.deepEqual(Object.keys(profileData).sort(),['applications','format','version']);
+assert.equal(profileData.applications[0].password,undefined);
+const profileFile=await transfer.encryptProfiles(profileData,'synthetic-password-2026');
+assert.equal(JSON.parse(profileFile).format,'ircc-encrypted-profiles');
+assert.ok(!profileFile.includes('DEMO0001'));
+assert.equal((await transfer.decryptProfiles(profileFile,'synthetic-password-2026')).applications[0].id,'demo-a');
+assert.equal((await transfer.decryptProfiles(encoded,'synthetic-password-2026')).captures,undefined,'Legacy backup supplies profiles only');
+await assert.rejects(()=>transfer.decryptProfiles(JSON.stringify(profileData),'synthetic-password-2026'),/backup.format/);
+await assert.rejects(()=>transfer.decryptProfiles(profileFile,'wrong-password'),/backup.decrypt/);
+const other={...profile,id:'demo-b',applicationNumber:'DEMO0002'};
+const merged=transfer.merge([other],profileData);assert.equal(merged.length,2);assert.equal(merged[0].id,'demo-b');
+assert.equal(transfer.merge([profile],{...profileData,applications:[{...profile,label:'Updated'}]})[0].label,'Updated');
+const query={...session['capture:profile:demo-a'],startedAt:'2026-11-16T10:00:00Z',finishedAt:'2026-11-16T10:02:00Z',responses:[{url:'https://ircc-services.canada.ca/api?token=URLSECRET',json:{otp:'OTPSECRET',actions:[{returnValue:JSON.stringify({access_token:'TOKEN',history:[{key:'Security',actStatus:'17'}]})}]}}]};
+const stores={'capture:profile:demo-a':query,'capture:8':{...query,profileId:'demo-b',application:{number:'DEMO0002'},startedAt:'2026-11-16T12:00:00Z'}};
+const raw=transfer.latestRaw(local,stores,'demo-a');
+assert.equal(raw.responses.length,1);assert.equal(raw.applications,undefined);assert.equal(raw.mailAssist,undefined);
+assert.ok(!JSON.stringify(raw).includes('OTPSECRET'));assert.ok(!JSON.stringify(raw).includes('URLSECRET'));
+assert.equal(JSON.parse(raw.responses[0].json.actions[0].returnValue).history[0].actStatus,'17');
+const original=JSON.stringify(stores);transfer.latestRaw(local,stores,'demo-a');assert.equal(JSON.stringify(stores),original);
+stores['capture:9']={...query,startedAt:'2026-11-16T11:00:00Z',responses:[],active:true};
+assert.throws(()=>transfer.latestRaw(local,stores,'demo-a'),/transfer.empty/,'Never substitute an older success when the newest query is empty');
+stores['capture:9'].responses=[{json:{history:[{key:'Security',actStatus:'18'}]}}];
+assert.equal(transfer.latestRaw(local,stores,'demo-a').query.active,true);
+const rawFile=await transfer.encryptRaw(raw,'synthetic-password-2026');
+assert.equal(JSON.parse(rawFile).format,'ircc-encrypted-query');assert.equal((await transfer.decryptRaw(rawFile,'synthetic-password-2026')).responses.length,1);
+await assert.rejects(()=>transfer.decryptProfiles(rawFile,'synthetic-password-2026'),/backup.format/);
+await assert.rejects(()=>transfer.decryptRaw(profileFile,'synthetic-password-2026'),/backup.format/);
+await assert.rejects(()=>transfer.decryptRaw(rawFile,'wrong-password'),/backup.decrypt/);
+console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge isolation, latest raw response export, partial/empty queries, redaction and distinct authenticated raw encryption.');
+
+// Both settings and the applicant header use the same export and stale-context checks.
+{
+  let downloads=0,filename='',blob;const rawStore={'capture:profile:demo-a':query};
+  c.Blob=Blob;c.setTimeout=()=>{};c.I18n={t:s=>s};c.document={getElementById:()=>null,createElement:()=>({click(){downloads++;filename=this.download;}})};
+  c.URL=class extends URL{static createObjectURL(value){blob=value;return 'blob:synthetic';}static revokeObjectURL(){}};
+  c.chrome={storage:{local:{get:async()=>local},session:{get:async()=>rawStore}}};
+  vm.runInContext(await fs.readFile(new URL('raw-export.js',import.meta.url),'utf8'),c);
+  await c.RawExport.write('demo-a');assert.equal(downloads,1);assert.ok(filename.endsWith('.json'));assert.equal(JSON.parse(await blob.text()).responses[0].json.otp,'[REDACTED]');
+  await assert.rejects(()=>c.RawExport.write('demo-a',{accept:()=>false}),/export.cancelled/);assert.equal(downloads,1);
+  await c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'});assert.equal(downloads,2);assert.ok(filename.endsWith('.irccraw'));
+  const encrypt=transfer.encryptRaw;let allowed=true;
+  transfer.encryptRaw=async(...args)=>{const text=await encrypt.apply(transfer,args);allowed=false;return text;};
+  await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password',accept:()=>allowed}),/export.cancelled/);assert.equal(downloads,2);
+  transfer.encryptRaw=async(...args)=>{const text=await encrypt.apply(transfer,args);rawStore['capture:profile:demo-a']={...query,startedAt:'2026-11-17T10:00:00Z'};return text;};
+  await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'}),/export.changed/);assert.equal(downloads,2);transfer.encryptRaw=encrypt;
+  console.log('PASS: shared raw export service, plain/encrypted output and no file after cancellation or query changes during encryption.');
+}

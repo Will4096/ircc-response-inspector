@@ -14,7 +14,7 @@
 
 - Use the loopback Tracker simulator and offline regression tests first. Access real IRCC only for targeted compatibility checks that the simulator cannot establish. Keep simulation assets and localhost permissions out of the extension runtime.
 
-- User-facing data exports are password-encrypted backups only. Use authenticated encryption, preview imports before explicit replacement, retain manual fallback, and exclude mailbox credentials/tokens/codes. Never export plaintext profile/query backups.
+- Profile import/export must use authenticated password encryption and a profile-only payload. Preview before merging by ID; retain other profiles and preferences. Raw responses from the latest query may be exported separately as plain JSON or optionally password-encrypted, as explicitly requested by the user. Exclude mailbox credentials/tokens/codes, redact known authentication fields, retain raw Security values, and never substitute an older successful query for a newer empty query.
 
 - Use a single persistent workspace for query, profiles and settings. Internal navigation must not create browser tabs or discard unsaved inputs. Only explicit external actions such as opening Tracker may open a website.
 - Show a persistent masked saved-state marker for stored app passwords; never read the actual secret back into the UI. Separate saved connection state from request binding, polling and candidate confirmation.

@@ -169,3 +169,9 @@
 候选卡片增加与设置页同步的自动验证开关，默认关闭时明确当前手动状态，不再让用户误以为倒计时故障。就地开启后记住全局偏好，仅唯一匹配候选倒计时；关闭立刻撤销计时。开启偏好不会解除本次主动暂停，多候选仍提示手动选择。
 
 按用户明确修改的口径，顶部最后更新从所有申请人 History 的最新日期取最大值，并标明 History 来源；每位申请人行在姓名下方显示自己的最后更新时间。使用 dateCreated / date 等事件日期，不使用 dateLoaded / 查询时间，不依赖数组顺序，不改动原始 History 或比较判定。日期缺失显示未获取；日期精度和时区处理保持来源信息。原显式 application 更新时间元数据不再替代此展示。
+
+- Switching the selected profile stops the old query and mailbox request and restarts the existing current-window Tracker tab, using its visible official sign-out action when available. A persisted per-tab transition blocks old results/OTP submissions until a fresh login/query form is reached. Profile caches remain isolated and retained.
+
+- Data transfer (2026-11-16): two independent settings cards. Profile files are always password-encrypted and contain only saved profiles. Import previews a merge by ID, preserving other profiles, general settings and mailbox connections; changed profiles invalidate their caches/baselines. Legacy encrypted backups supply profiles only. Raw exports use the latest captured query for one selected profile, include partial-query status, support optional encryption and local decrypt-to-JSON without import. Plain exports remain sensitive and must be redacted before sharing.
+
+- Raw export is also available in the applicant-progress card header as a compact disclosure with plain JSON and encrypted-file choices. A modal confirms the selected profile and format; password inputs appear only for encryption. Both entry points use raw-export.js and the same latest-query rules. Cancel, profile changes, hidden query views and new query contexts prevent stale downloads; passwords clear on close. This exports the whole selected application response set, not a filtered individual row.
