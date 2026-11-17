@@ -1,6 +1,6 @@
 # IRCC Response Inspector
 
-> 4.2.0：统一侧边栏工作区、可选 Gmail / Windows 163 邮箱辅助、可取消的验证码倒计时，以及分申请人的 History 更新时间。参见[安装与授权说明](MAIL-SETUP.md)。
+> 4.3.1：统一侧边栏工作区、可选 Gmail / Windows 163 邮箱辅助、可取消的验证码倒计时，以及分申请人的 History 更新时间。参见[安装与授权说明](MAIL-SETUP.md)。
 
 [简体中文](README.md) · [English](README.en.md)
 
@@ -51,7 +51,7 @@
 
 ## 开发与验证
 
-当前版本：4.2.0。无第三方运行时依赖。使用 Node.js 22 或更高版本：
+当前版本：4.3.1。无第三方运行时依赖。使用 Node.js 22 或更高版本：
 
 ~~~sh
 node tests.mjs

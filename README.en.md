@@ -1,6 +1,6 @@
 # IRCC Response Inspector
 
-> Version 4.2.0: persistent workspace, optional Gmail / Windows 163 assistance, cancellable verification countdown and per-applicant History update dates. See the [setup guide](MAIL-SETUP.en.md).
+> Version 4.3.1: persistent workspace, optional Gmail / Windows 163 assistance, cancellable verification countdown and per-applicant History update dates. See the [setup guide](MAIL-SETUP.en.md).
 
 [English](README.en.md) · [简体中文](README.md)
 
@@ -51,7 +51,7 @@ Read the [privacy policy](PRIVACY.md), [security notes](SECURITY.md) and [publis
 
 ## Development and verification
 
-Current version: 4.2.0. No third-party runtime dependencies. Use Node.js 22 or later:
+Current version: 4.3.1. No third-party runtime dependencies. Use Node.js 22 or later:
 
 ~~~sh
 node tests.mjs
