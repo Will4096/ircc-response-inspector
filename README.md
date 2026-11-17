@@ -21,6 +21,21 @@
 - 默认中文，可切换英文；中文保留 Surname / Last name、Given name 等原网站字段名。
 - 申请资料支持强制密码加密的导入与导出；最新原始响应可单独导出为 JSON 或密码加密文件。邮箱凭据和验证码不导出。
 
+## 功能预览
+
+以下为 4.3.1 界面的脱敏展示图，姓名、编号、生日、邮箱和具体时间均已隐藏。图片经过生成式编辑及版式重排，仅用于说明功能，不作为原始查询结果凭证。Security 的“无记录”不能据此认定未进入安调。
+
+<table>
+<tr>
+<td width="50%"><strong>申请人进度与 History</strong><br><img src="docs/images/progress-redacted.png" alt="已脱敏的申请人进度、History 更新时间和 Security 原始状态展示" width="380"></td>
+<td width="50%"><strong>多份申请资料管理</strong><br><img src="docs/images/profiles-redacted.png" alt="姓名、申请编号、UCI、生日及出生国家均已隐藏的申请管理展示" width="380"></td>
+</tr>
+<tr>
+<td width="50%"><strong>可选邮箱辅助与倒计时验证</strong><br><img src="docs/images/mail-assistance-redacted.png" alt="邮箱及时间已隐藏的可选验证码辅助设置展示" width="380"></td>
+<td width="50%"><strong>资料与原始响应分别导出</strong><br><img src="docs/images/data-export-redacted.png" alt="申请资料强制加密、原始查询响应可选加密的导出展示" width="380"></td>
+</tr>
+</table>
+
 ## 安装
 
 1. 前往 [Releases](https://github.com/Will4096/ircc-response-inspector/releases)，下载带版本号的安装 ZIP；不要选自动生成的 Source code 压缩包。

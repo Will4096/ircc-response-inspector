@@ -21,6 +21,21 @@ This independent tool is not affiliated with IRCC or the Government of Canada. I
 - Chinese by default, with English support. The Chinese UI retains official field names such as Surname / Last name and Given name.
 - Import/export profiles with mandatory password encryption. Export the latest raw query responses separately as JSON or optionally password-encrypted files. Mailbox credentials and verification codes are excluded.
 
+## Feature previews
+
+These illustrations show the Chinese UI in version 4.3.1; the extension also supports English. Names, identifiers, birth details, email addresses and exact times are hidden. Images include generative editing and layout changes and illustrate features rather than serve as original query evidence. A missing Security record does not establish that security screening has not started.
+
+<table>
+<tr>
+<td width="50%"><strong>Applicant progress and History</strong><br><img src="docs/images/progress-redacted.png" alt="Redacted applicant progress, History update dates and raw Security status illustration" width="380"></td>
+<td width="50%"><strong>Separate application profiles</strong><br><img src="docs/images/profiles-redacted.png" alt="Profile management illustration with identity details and birth information hidden" width="380"></td>
+</tr>
+<tr>
+<td width="50%"><strong>Optional mail assistance and countdown</strong><br><img src="docs/images/mail-assistance-redacted.png" alt="Optional verification assistance with mailbox address and timestamps hidden" width="380"></td>
+<td width="50%"><strong>Separate profile and raw-data exports</strong><br><img src="docs/images/data-export-redacted.png" alt="Mandatory encrypted profile export and optional raw-query encryption illustration" width="380"></td>
+</tr>
+</table>
+
 ## Install
 
 1. Download the named installation ZIP from [Releases](https://github.com/Will4096/ircc-response-inspector/releases). Do not choose GitHub's automatic Source code archive.
