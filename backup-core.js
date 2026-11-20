@@ -93,7 +93,7 @@ var DataTransferCore={
     // Export response records only: no form profile, preferences, baselines or mailbox state.
     const responses=latest.responses.map(record=>{
       const safe={};for(const key of ['url','page','relationId','capturedAt','status','mimeType','json'])if(record[key]!==undefined)safe[key]=record[key];
-      if(typeof safe.url==='string')try{const url=new URL(safe.url);for(const key of [...url.searchParams.keys()])if(/token|code|password|session|authorization|reqid/i.test(key))url.searchParams.set(key,'[REDACTED]');safe.url=url.href;}catch{safe.url='[OMITTED]';}
+      for(const key of ['url','page'])if(typeof safe[key]==='string')safe[key]=redactResponseUrl(safe[key]);
       return redactPrivateFields(safe);
     });
     return {format:'ircc-raw-query',version:1,exportedAt:new Date().toISOString(),profileId,query:{startedAt:latest.startedAt||null,finishedAt:latest.finishedAt||null,status:latest.status||'unknown',active:!!latest.active},responses};

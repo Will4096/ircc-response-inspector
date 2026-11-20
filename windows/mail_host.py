@@ -16,7 +16,7 @@ import struct
 import sys
 
 MAX_MESSAGE = 262144
-HELPER_VERSION = '1.5'
+HELPER_VERSION = '1.6'
 ROOT = Path(__file__).resolve().parent
 SECRET = ROOT / 'mailbox.dpapi'
 
@@ -160,7 +160,10 @@ def handle(request):
     if action == 'status':
         return {'ok': True, 'version': HELPER_VERSION, 'configured': SECRET.exists()}
     if action == 'clear':
-        SECRET.unlink(missing_ok=True)
+        # Fixed historical location; no caller-controlled paths.
+        legacy = Path(os.environ.get('LOCALAPPDATA', str(ROOT))) / 'IRCCMailHelper' / 'mailbox.dpapi'
+        for target in {SECRET, SECRET.with_suffix('.tmp'), legacy}:
+            target.unlink(missing_ok=True)
         return {'ok': True}
     if action == 'configure':
         address = account(request.get('email'))
@@ -213,11 +216,18 @@ def handle(request):
             metadata, headers = tuples[0]
             received = internal_time(metadata)
             size = re.search(rb'RFC822\.SIZE\s+(\d+)', metadata)
-            if received is None or received < since or not size or int(size[1]) > 131072:
+            if received is None or received < since or received > now + 60000 or not size or int(size[1]) > 131072:
                 continue
             parsed = email.message_from_bytes(headers, policy=policy.default)
             senders = getaddresses(parsed.get_all('From', []))
-            if not any(re.search(r'@(?:[a-z0-9-]+\.)*(?:cic\.gc\.ca|canada\.ca)$', v, re.I) for _, v in senders):
+            if len(senders) != 1 or not re.fullmatch(r'[^@\s]+@(?:[a-z0-9-]+\.)*(?:cic\.gc\.ca|canada\.ca)', senders[0][1], re.I):
+                continue
+            recipients = [v.lower() for _, v in getaddresses(parsed.get_all('To', []) + parsed.get_all('Delivered-To', []))]
+            subject = str(parsed.get('Subject', '')).strip()
+            shared = len(senders) == 1 and senders[0][1].lower() == 'do-not-reply-ircc-cxp-ne-pas-repondre-ircc-pxc@notification.canada.ca' and re.search(r'^IRCC Portal\s*[-–—]\s*New version account\s*[-–—]\s*Confirm your account(?:\s*/|\s*$)', subject, re.I)
+            unrelated = re.search(r'(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|account\s+creation|permanent\s+residen(?:ce|t)\s+portal|newsletter|news bulletin', subject, re.I)
+            recognizable = re.search(r'tracker|suivi|verification|v[ée]rification|one[ -]time|confirmation|security\s+code', subject, re.I)
+            if address not in recipients or not (shared or (recognizable and not unrelated)):
                 continue
             status, result = client.uid('fetch', uid, '(BODY.PEEK[])')
             if status == 'OK':

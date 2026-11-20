@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const root=new URL('./',import.meta.url);
 const read=file=>fs.readFile(new URL(file,root),'utf8');
 const stored={},listeners=[];
-const privacy='申请资料、查询结果及对比记录仅保存在本机。本扩展不向开发者或第三方上传数据；查询所需信息仅提交至 IRCC 官方网站。';
+const privacy='申请资料和查询记录保存在本机；查询所需信息提交至 IRCC，启用邮箱辅助时直接访问所选邮箱服务。';
 async function surface(){
   const label={textContent:'',getAttribute:()=> '管理申请'};
   const controls=[{value:''},{value:''}];
@@ -27,12 +27,12 @@ assert.equal(popup.c.I18n.message('张三 — Completed'),'张三 — Completed'
 assert.ok(popup.c.I18n.t(privacy).includes('stored only on this device'));
 const reopened=await surface();assert.equal(reopened.c.I18n.language,'en','Preference persists on reopen');
 // Every static label and explicitly translated UI fragment must have an English value.
-for(const file of ['popup.html','options.html','settings.html']){
+for(const file of ['popup.html','options.html','settings.html','links.html']){
   const html=await read(file);
   for(const match of html.matchAll(/data-i18n(?:-title|-placeholder|-label)?="([^"]+)"/g))if(/[\u3400-\u9fff]/.test(match[1]))assert.notEqual(popup.c.I18n.t(match[1]),match[1],file+': '+match[1]);
   assert.equal((html.match(/data-language/g) || []).length,file==='settings.html'?2:1,'Header switches remain available; settings owns the preference control');
   if(file==='popup.html'){assert.ok(!html.includes('settings-panel'));assert.ok(!html.includes('languageSettings'));}
-  assert.ok(html.indexOf('src="i18n.js"')<html.indexOf('src="'+(file==='popup.html'?'popup.js':file==='options.html'?'options.js':'settings.js')+'"'));
+  assert.ok(html.indexOf('src="i18n.js"')<html.indexOf('src="'+(file==='popup.html'?'popup.js':file==='options.html'?'options.js':file==='links.html'?'links.js':'settings.js')+'"'));
 }
 for(const file of ['popup.js','options.js','settings.js','ui-model.js','mail-options.js','backup-ui.js'])for(const match of (await read(file)).matchAll(/t\('((?:\\.|[^'])*)'\)/g)){
   const key=vm.runInNewContext("'"+match[1]+"'");

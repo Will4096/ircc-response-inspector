@@ -1,8 +1,8 @@
 # Product and implementation rules
 
-- Treat Query, Manage applications and Settings as one product with shared navigation, typography, spacing, controls and status language. Do not solve structural problems by appending isolated controls or CSS overrides.
+- Treat Query, Manage applications, Useful links and Settings as one product with shared navigation, typography, spacing, controls and status language. Do not solve structural problems by appending isolated controls or CSS overrides.
 - Establish the user task, information hierarchy and complete state transitions before changing UI. Each stage has one clear primary action; advanced diagnostics and developer setup stay out of the normal path.
-- Keep application profiles in Manage applications; general preferences, optional mailbox connections, privacy/data controls and About belong in the independent Settings page. Header navigation must work across all three pages.
+- Keep application profiles in Manage applications; general preferences, optional mailbox connections, privacy/data controls and About belong in the independent Settings page. Header navigation must work across all four pages.
 - Mail assistance is opt-in and off by default. A checked setup switch is not a verified connection. Distinguish disabled, setup required, connected, authorization expired and unavailable states. Retain manual code entry. OTP auto-verification is separately opt-in and off by default; after opt-in a unique matching candidate may submit after a visible cancellable five-second countdown. Keep immediate verification and persistent per-request pause.
 - Preserve query completion, per-person History, Security raw codes, comparisons and profile isolation. Never interpret missing Security records as absence of security screening.
 - Default Chinese, complete English support, retain official field terms where useful. Language changes must preserve unsaved input. Show specific action feedback, not a generic Done message.
@@ -24,7 +24,7 @@
 - Route all Tracker open/resume/relogin actions through the same current-window resolver. Preserve established tab identity across GCKey redirects, reuse that tab for restart, never persist authentication URLs/parameters, and never replace a visibly unrelated page or another window's tab.
 
 - Missing tab.url is an access/association state, not proof that Tracker is absent. Model Chrome's withheld URL and permission approval/denial in tests; request only the two optional official authentication origins on an explicit click, and never default to creating a duplicate tab on refusal.
-- The 163 helper is single-request, on demand. Settings rendering must not launch it. Pause fetching when candidates await confirmation; cancel new polling when the verification demand ends, allowing an in-flight request to finish and exit.
+- The 163 helper is single-request, on demand. An enabled 163 connection with existing nativeMessaging permission may run one status-only compatibility probe when the visible workspace opens or its cached result expires (5 minutes healthy, 1 minute failure); share concurrent probes. Embedded Settings rendering must not independently launch it. Status probes must not decrypt credentials or log in to email. Pause fetching when candidates await confirmation; cancel new polling when the verification demand ends, allowing an in-flight request to finish and exit.
 
 - Native helper installation must be visible outside the Codex MSIX environment. Use %USERPROFILE%/.ircc-mail-helper and script-relative private data, verify physical paths and a non-packaged Windows registration probe; a subprocess self-test alone does not prove Chrome connectivity.
 

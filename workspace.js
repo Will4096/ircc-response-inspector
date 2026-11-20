@@ -1,6 +1,6 @@
 // One persistent host. Views are retained in memory, not reopened as browser tabs.
 (()=>{
-  const views=new Map(),allowed=new Set(['popup.html','options.html','settings.html','privacy.html']);
+  const views=new Map(),allowed=new Set(['popup.html','options.html','settings.html','links.html','privacy.html']);
   function show(page,hash=''){
     if(!allowed.has(page))return;
     let frame=views.get(page);
@@ -9,6 +9,7 @@
     if(hash)try{const target=frame.contentDocument?.getElementById(hash.slice(1));if(target){frame.contentWindow.location.hash=hash;if(target.tagName==='DETAILS')target.open=true;requestAnimationFrame(()=>target.scrollIntoView());}}catch{}
     for(const button of document.querySelectorAll('[data-view]')){if(button.dataset.view===page)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
   }
+  window.addEventListener('ircc-open-helper-settings',()=>show('settings.html','#mailHelperDetails'));
   for(const button of document.querySelectorAll('[data-view]'))button.onclick=()=>show(button.dataset.view);
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin||event.data?.type!=='ircc-workspace-navigate'||![...views.values()].some(frame=>frame.contentWindow===event.source))return;
@@ -16,5 +17,5 @@
   });
   document.getElementById('workspaceVersion').textContent='v'+chrome.runtime.getManifest().version;
   const view=new URLSearchParams(location.search).get('view');
-  void I18n.init();show(['settings','options','privacy'].includes(view)?view+'.html':'popup.html',location.hash);
+  void I18n.init();show(['settings','options','links','privacy'].includes(view)?view+'.html':'popup.html',location.hash);
 })();

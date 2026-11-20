@@ -1,41 +1,36 @@
-# Publishing checklist / 发布说明
+# Publishing checklist / 发布检查
 
-Target account: **Will4096**. Repository: **ircc-response-inspector**. Visibility: **Public**. Do not use the separate work-account GitHub connection.
+Personal repository: Will4096/ircc-response-inspector. Do not use the separate work-account connector. Work on the preview branch until merge/release is explicitly authorized.
 
-## Reproducible package
+## Source and package
 
-Run `node scripts/build-release.mjs` with Node.js 22 or later. The script writes a ZIP and SHA-256 file under `dist/` using an explicit runtime-file allowlist. It excludes tests, documentation, renderer scripts, local data, exports and browser profiles. The script also stages a reviewed public-source bundle under `public-upload/` for browser upload. Inspect the generated file list before committing it. Do not upload the containing Family directory.
+Node.js 22+. Run every Node/Python suite in .github/workflows/release.yml and the loopback browser suite with synthetic records only. Run node scripts/build-privacy.mjs --check to prevent policy drift. After helper changes run node scripts/build-installer.mjs, which pins the bundled installer hash. Use node scripts/build-release.mjs --runtime-only for a local runtime package; omit the flag for explicit public-source staging. Never upload the containing Family directory.
 
-Tests: `node tests.mjs`, `node comparison-tests.mjs`, `node i18n-tests.mjs`, `node privacy-tests.mjs`.
+Runtime ZIP includes application assets, LICENSE, bilingual help/privacy and the explicitly downloadable helper installer. Tests, private audits, promotional sources, browser profiles and user data are excluded. Text entries use LF and deterministic ZIP metadata. Copy the reviewed ZIP and checksum to downloads, then run node scripts/build-release.mjs --verify. CI checks the checksum and independently rebuilds and byte-compares the archive from checked-out source. A checksum alone is not source verification. Do not rewrite published releases.
 
-## Permission justification
+## Release gates / 发布门槛
 
-- `debugger`: temporarily attach to the selected official Tracker tab for reliable form input and JSON-response inspection. Detach on completion, failure, stop, timeout or navigation away. No arbitrary-site collection, cookie API, remote control backend or remote executable code.
-- `scripting`: locate and fill the official Tracker form, confirm verification state and read the current application/History view.
-- `storage`: store profiles and preferences locally, comparison baselines locally and query results in session storage; support deletion controls.
-- `activeTab`: identify the tab explicitly opened by the user without requesting full browsing-history or `tabs` permission, including during the official sign-in transition.
-- `https://ircc-services.canada.ca/*`: only this Tracker host is granted persistent access. Mailbox hosts are not requested.
+- Tag, manifest and release notes must agree. Review all runtime entries and helper payloads. Verify installer-ui.js matches the bundled installer hash. Helper 1.6 is required for header filtering and legacy credential cleanup; older helpers show an update state.
+- Review Chinese/English normal, empty, error, cancelled, expired and partial-result states with synthetic data. Offline tests do not establish real-provider compatibility.
+- Keep PRIVACY.md and generated privacy.html consistent. Disclose actual local persistence, candidate-body access, provider-wide OAuth permission, diagnostics and deletion boundaries.
+- Verify an available private vulnerability/contact route before inviting sensitive reports. Source changes cannot configure GitHub repository settings. If unavailable, request a private contact method without posting details.
+- Document Google OAuth project/audience, production OAuth security design, applicable verification or exception, and real authorization/revocation tests. GitHub publication is not Google approval. Gmail remains developer-configured pending this evidence.
+- Record review of actual Tracker, authentication-service and mailbox terms for intended automated use. General website terms alone do not establish permission. Do not claim official authorization.
+- Determine operating entity, jurisdictions, monetization/support model and applicable privacy, consumer and immigration-advice obligations with qualified counsel when needed. MIT does not waive non-excludable rights or license government marks.
+- Use synthetic/redacted promotional screenshots with metadata removed; disclose illustrative edits. Do not promise real-time/full access, guaranteed retrieval, approval prediction or Security-code interpretation. Label existing 4.3.1 illustrations as older illustrative UI.
 
-## Before a Chrome Web Store submission
+External reviews/settings are not established by source changes or passing tests. Record their actual status before release, rather than silently marking them complete.
 
-1. Complete developer registration and account verification yourself. No store submission has been made.
-2. Upload the runtime ZIP, not the full repository.
-3. Provide accurate bilingual listing copy, icon and screenshots captured with fictitious data; do not imply government endorsement or guaranteed processing outcomes.
-4. Publish PRIVACY.md at an accessible HTTPS URL and add the URL to the privacy field. The eventual public GitHub policy URL can be used after the repository actually exists.
-5. Explain local processing of identity details, an ephemeral verification code, medical-exam milestone status and website content. Dashboard declarations must match the current form definitions, this policy and the actual implementation; local processing must not be described as “no data is handled”.
-6. Supply reviewer instructions for the official login and manually supplied OTP. Do not include your real account or private application data. The full logged-in journey still needs testing in the publisher's own environment. Automated tests use synthetic data and do not replace live verification.
-7. Choose Unlisted or Public and submit only after reviewing the final listing. Approval is not guaranteed.
+## Permissions and store submission
 
-Official references (checked 2026-10-28):
-- https://developer.chrome.com/docs/webstore/prepare
-- https://developer.chrome.com/docs/webstore/cws-dashboard-privacy
-- https://developer.chrome.com/docs/webstore/program-policies/privacy
-- https://developer.chrome.com/docs/webstore/review-process
+Mandatory: official Tracker host, debugger, scripting, activeTab, storage and sidePanel. Debugger is restricted to the selected Tracker operation and detached at its end. Optional: identity/Gmail host, Windows nativeMessaging, and two official authentication hosts for metadata/h1 session checks. Request optional access only for the corresponding action. No all-sites permission or login-form reading.
+
+Chrome Web Store submission requires publisher registration, runtime ZIP, accessible privacy policy and accurate dashboard declarations. Supply synthetic instructions, never real credentials. Review https://developer.chrome.com/docs/webstore/program-policies/disclosure-requirements/ . GitHub distribution is not store approval.
+
+## GitHub release
+
+A reviewed vX.Y.Z tag must match manifest.json and release-notes/vX.Y.Z.md. The tag-only pinned workflow runs its listed tests, validates policy generation, checks the ZIP checksum and compares a source rebuild before creating and publishing a draft release. Existing releases remain unchanged. It uses only the job-scoped GITHUB_TOKEN. Full logged-in/provider validation remains separate.
 
 ## License
 
-The owner selected the MIT License on 2026-10-28. Include the complete LICENSE and copyright notice in source and installation distributions. Do not remove the notice from modified copies.
-
-## GitHub Releases
-
-Push a reviewed version tag matching manifest.json (for example v3.4.0). The pinned release workflow runs the four test suites, checks the committed installation ZIP checksum, uploads the ZIP and checksum to a draft Release, then publishes it. It uses only the job-scoped GITHUB_TOKEN with contents:write, no personal token or browser automation. Existing releases are never overwritten automatically. Store notes under release-notes/vX.Y.Z.md and add new paths to the source allowlist before staging.
+Keep the complete MIT LICENSE and notices in source and runtime distributions. Review rights to external marks, screenshots and dependencies separately.

@@ -5,6 +5,7 @@ const MAIL_NATIVE='com.will4096.ircc_mail';
 const MAIL_GMAIL_ORIGIN='https://gmail.googleapis.com/*';
 let mailNativeStatus=null;
 let mailNativeObserved=null;
+let mailNativeCheckedAt=0,mailHealthFlight=null;
 const MAIL_WINDOW=600000; // Observation window, NOT a claim about IRCC code validity.
 const mailEnded=new Map();
 let mailWrites=Promise.resolve();
@@ -16,23 +17,62 @@ function mailDiagnostic(stage,count){
 async function mailNative(payload){
   if((await chrome.runtime.getPlatformInfo()).os!=='win')throw new Error('mail.windows');
   if(!await chrome.permissions.contains({permissions:['nativeMessaging']}))throw new Error('mail.permission');
+  await chrome.storage.session.remove('mail:health');
   try{const result=await chrome.runtime.sendNativeMessage(MAIL_NATIVE,payload);if(result?.error)throw new Error(result.error);
     const version=result?.helperVersion??result?.version;
     mailNativeObserved={version:typeof version==='string'&&/^\d+\.\d+(?:\.\d+)?$/.test(version)?version:null,protocol:Number.isInteger(result?.protocol)?result.protocol:null};
-    if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<5))throw new Error('mail.version');
+    if(payload.action!=='clear'&&(result?.protocol!==1||!/^1\.(\d+)$/.test(result.helperVersion||'')||Number(result.helperVersion.split('.')[1])<6))throw new Error('mail.version');
     mailNativeStatus={helperReady:true,configured:payload.action==='status'?!!result.configured:payload.action==='clear'?false:true};
     if(payload.action!=='clear'){const saved=(await chrome.storage.local.get('mailConnection')).mailConnection;if(saved?.lastError==='mail.version')await chrome.storage.local.set({mailConnection:{...saved,lastError:null}});}
     return result;}
   catch(error){if(error.message==='mail.version')mailNativeStatus={helperReady:false,error:'mail.version'};else if(error.message==='mail.helper'||!/^mail\./.test(error.message)){
     const text=String(error.message||'');const reason=/not found|not registered/i.test(text)?'not-found':/forbidden|denied|blocked/i.test(text)?'forbidden':/exited|failed to start|launch/i.test(text)?'exited':/invalid|communicat|length|json/i.test(text)?'protocol':'unknown';
-    mailNativeStatus={helperReady:false,reason};
+    mailNativeObserved=null;mailNativeStatus={helperReady:false,reason};
   }if(/^mail\./.test(error.message))throw error;throw new Error('mail.helper');}
+  finally{mailNativeCheckedAt=Date.now();}
 }
-async function mailConfig(){return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
+// Compatibility probes never decrypt credentials or log in to the mailbox.
+function mailHealthSnapshot(){
+  const status=mailNativeStatus?.helperReady?'ready':mailNativeStatus?.error==='mail.version'?'upgrade':mailNativeStatus?.reason==='not-found'?'missing':'unavailable';
+  return {status,version:mailNativeObserved?.version||null,protocol:mailNativeObserved?.protocol??null,required:'1.6',checkedAt:mailNativeCheckedAt||Date.now(),extensionVersion:chrome.runtime.getManifest?.().version||'development'};
+}
+async function mailHealth(force=false){
+  const config=await mailConfig();
+  if(!config.enabled||config.provider!=='163')return {status:'off'};
+  if((await chrome.runtime.getPlatformInfo()).os!=='win')return {status:'unsupported'};
+  if(!await chrome.permissions.contains({permissions:['nativeMessaging']}))return {status:'permission'};
+  const version=chrome.runtime.getManifest?.().version||'development',cached=(await chrome.storage.session.get('mail:health'))['mail:health'];
+  const fresh=entry=>entry&&entry.extensionVersion===version&&entry.required==='1.6'&&Number.isFinite(entry.checkedAt)&&Date.now()>=entry.checkedAt&&Date.now()-entry.checkedAt<(entry.status==='ready'?300000:60000);
+  if(!force){
+    // Explicit setup/check and actual fetch replies are also compatibility evidence.
+    if(mailNativeCheckedAt&&(!cached||mailNativeCheckedAt>cached.checkedAt)){
+      const latest=mailHealthSnapshot();if(fresh(latest)){await chrome.storage.session.set({'mail:health':latest});return latest;}
+    }
+    if(fresh(cached))return cached;
+  }
+  if(mailHealthFlight)return mailHealthFlight;
+  let timer;
+  const save=async result=>{const current=await mailConfig();if(!current.enabled||current.provider!=='163')return {status:'off'};await chrome.storage.session.set({'mail:health':result});return result;};
+  const work=(async()=>{try{await mailNative({action:'status'});}catch(error){if(['mail.permission','mail.windows'].includes(error.message))return save({status:error.message==='mail.permission'?'permission':'unsupported',required:'1.6',checkedAt:Date.now(),extensionVersion:version});}return save(mailHealthSnapshot());})();
+  const pending=Promise.race([work,new Promise(resolve=>{timer=setTimeout(()=>{void save({status:'unavailable',required:'1.6',checkedAt:Date.now(),extensionVersion:version}).then(resolve);},6000);})]);
+  mailHealthFlight=pending;
+  // A timed-out native invocation retains the lock until it actually exits.
+  void work.finally(()=>{clearTimeout(timer);if(mailHealthFlight===pending)mailHealthFlight=null;}).catch(()=>{});
+  return pending;
+}
+const MAIL_RETENTION=86400000;
+async function mailPrune(){
+  return mailWrite(async()=>{
+    const all=await chrome.storage.local.get(null),now=Date.now();
+    const expired=Object.entries(all).filter(([key,value])=>key.startsWith('mailPending:')&&(!Number.isFinite(value?.startedAt)||value.startedAt>now+60000||now-value.startedAt>=MAIL_RETENTION)).map(([key])=>key);
+    if(expired.length)await chrome.storage.local.remove(expired);
+  });
+}
+async function mailConfig(){await mailPrune();return (await chrome.storage.local.get('mailAssist')).mailAssist || {enabled:false};}
 async function mailEpoch(){const key='mail:epoch';let epoch=(await chrome.storage.session.get(key))[key];if(!epoch){epoch=crypto.randomUUID();await chrome.storage.session.set({[key]:epoch});}return epoch;}
 async function mailRemember(request,state){
   if(!request)return;const epoch=request.epoch||await mailEpoch();request.epoch=epoch;
-  await mailWrite(async()=>{const {applications=[]}=await chrome.storage.local.get('applications');const key='mailPending:'+request.profileId;if(!applications.some(p=>p.id===request.profileId)){await chrome.storage.local.remove(key);return;}await chrome.storage.local.set({[key]:{...request,state,updatedAt:Date.now()}});});
+  await mailWrite(async()=>{const {applications=[]}=await chrome.storage.local.get('applications');const key='mailPending:'+request.profileId;if(!applications.some(p=>p.id===request.profileId)){await chrome.storage.local.remove(key);return;}const safe={};for(const field of ['id','tabId','profileId','applicationNumber','email','provider','startedAt','deadline','epoch','consumed','autoPaused'])if(request[field]!==undefined)safe[field]=request[field];if(!Number.isFinite(safe.startedAt)||Date.now()-safe.startedAt>=MAIL_RETENTION){await chrome.storage.local.remove(key);return;}await chrome.storage.local.set({[key]:{...safe,state,updatedAt:Date.now()}});});
 }
 async function mailCancel(tabId,expected,state='paused'){
   if(expected&&mailRequests.get(tabId)?.id!==expected.id)return;
@@ -85,6 +125,7 @@ function mailPlain(part){
   return (plain.length?plain:parts.map(mailPlain).filter(Boolean)).join('\n').slice(0,64000);
 }
 async function mailMessages(config,request){
+  if(config.provider==='163'&&mailNativeStatus?.error==='mail.version')throw new Error('mail.version');
   if(config.provider==='163')return (await mailNative({action:'poll',email:config.email,since:Math.floor(request.startedAt/1000)*1000})).messages || [];
   const auth=mailGmailTokens.get(config.email);
   if(!auth || auth.expires<Date.now())throw new Error('mail.auth');
@@ -92,9 +133,12 @@ async function mailMessages(config,request){
   const list=await mailGmailFetch('messages?maxResults=10&q='+encodeURIComponent(q),auth.token);
   const messages=[];
   for(const item of list.messages || []){
+    const metadata=await mailGmailFetch('messages/'+encodeURIComponent(item.id)+'?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Delivered-To&metadataHeaders=Subject',auth.token);
+    const header=name=>(metadata.payload?.headers || []).filter(h=>h.name.toLowerCase()===name).map(h=>h.value).join(',');
+    const candidate={id:item.id,receivedAt:Number(metadata.internalDate),subject:header('subject'),from:header('from'),to:(header('to')+' '+header('delivered-to')).match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+/ig) || []};
+    if(!MailCore.headerAllowed(candidate,{...request,email:config.email,provider:'gmail'}))continue;
     const data=await mailGmailFetch('messages/'+encodeURIComponent(item.id)+'?format=full',auth.token);
-    const header=name=>(data.payload?.headers || []).filter(h=>h.name.toLowerCase()===name).map(h=>h.value).join(',');
-    messages.push({id:item.id,receivedAt:Number(data.internalDate),subject:header('subject'),from:header('from'),to:(header('to')+' '+header('delivered-to')).match(/[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+/ig) || [],text:mailPlain(data.payload || {}).slice(0,64000)});
+    messages.push({...candidate,text:mailPlain(data.payload || {}).slice(0,64000)});
   }
   return messages;
 }
@@ -235,18 +279,22 @@ async function mailAutoControl(tabId,message){
 async function mailHandle(message,sender){
   if(!String(message.action).startsWith('mail'))return undefined;
   const extension=mailExtensionSender(sender),tracker=mailTrackerSender(sender),tabId=extension?message.tabId:sender.tab?.id ?? message.tabId;
-  if(['mailSave','mailAuthorize','mailSetup163','mailTest163','mailDisconnect','mailSettings','mailHelperStatus'].includes(message.action)){
+  if(['mailSave','mailAuthorize','mailSetup163','mailTest163','mailDisconnect','mailSettings','mailHealth','mailHelperStatus'].includes(message.action)){
     if(!extension)throw new Error('mail.permission');
+    if(message.action==='mailHealth')return mailHealth(message.force===true);
     if(message.action==='mailSettings'){
       const config=await mailConfig(),saved=(await chrome.storage.local.get('mailConnection')).mailConnection;
-      const token=mailGmailTokens.get(config.email);const connection={authReady:!!token && token.expires>Date.now(),expiresAt:token?.expires || null,verifiedAt:saved?.email===config.email && saved?.provider===config.provider?saved.verifiedAt:null,error:saved?.email===config.email?saved.lastError:null};
+      const token=mailGmailTokens.get(config.email);const connection={authReady:!!token && token.expires>Date.now(),expiresAt:token?.expires || null,verifiedAt:saved?.email===config.email && saved?.provider===config.provider?saved.verifiedAt:null,error:saved?.email===config.email?saved?.lastError:null};
       if(config.provider==='163'){
         // Rendering settings must not launch a native process. Show last verified configuration.
         connection.helperReady=mailNativeStatus?.helperReady??(connection.error==='mail.helper'?false:connection.verifiedAt?true:undefined);
         if(mailNativeStatus?.error)connection.error=mailNativeStatus.error;
-        connection.helperVersion=mailNativeObserved?.version;connection.helperProtocol=mailNativeObserved?.protocol;
+        const cached=(await chrome.storage.session.get('mail:health'))['mail:health'];
+        const health=cached?.required==='1.6'&&cached.extensionVersion===(chrome.runtime.getManifest?.().version||'development')?cached:null;
+        if(!mailNativeStatus&&health){connection.helperReady=health.status==='ready';if(health.status==='upgrade')connection.error='mail.version';}
+        connection.helperVersion=mailNativeObserved?.version||health?.version;connection.helperProtocol=mailNativeObserved?.protocol??health?.protocol;
         connection.helperFailure=mailNativeStatus?.reason;
-        connection.configured=mailNativeStatus?.configured??!!connection.verifiedAt;connection.onDemand=true;
+        connection.configured=mailNativeStatus?.configured??!!connection.verifiedAt;connection.onDemand=true;connection.helperCheckedAt=mailNativeCheckedAt||health?.checkedAt||null;
       }
       return {config,connection,extensionId:chrome.runtime.id,redirect:'https://'+chrome.runtime.id+'.chromiumapp.org/gmail'};
     }
@@ -305,3 +353,7 @@ chrome.tabs.onRemoved.addListener(id=>void mailCancel(id));
 chrome.tabs.onUpdated.addListener((id,change)=>{
   if(change.url && !['/2/ast-search','/2/ast-otp-verification'].includes(mailPage(change.url)))void (async()=>{const request=mailRequests.get(id);await mailCancel(id);if(request&&/^\/2\/ast-(details|view-application|history)/.test(mailPage(change.url)))await mailRemember(request,'completed');})();
 });
+
+mailPrune().catch(()=>{});
+chrome.runtime.onStartup?.addListener(()=>{mailPrune().catch(()=>{});});
+chrome.runtime.onInstalled?.addListener(()=>{mailPrune().catch(()=>{});});

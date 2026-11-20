@@ -10,7 +10,7 @@ const get=(db,key)=>key===null?{...db}:Object.fromEntries((Array.isArray(key)?ke
 const storage=db=>({get:async key=>get(db,key),set:async value=>Object.assign(db,JSON.parse(JSON.stringify(value))),remove:async keys=>{for(const k of Array.isArray(keys)?keys:[keys])delete db[k];}});
 const context={URL,URLSearchParams,Date:Clock,Map,Set,crypto:webcrypto,TextEncoder,TextDecoder,Uint8Array,atob,AbortSignal,normalizeApplicationNumber:s=>String(s || '').replace(/[^a-z0-9]/gi,'').toUpperCase(),chrome:{
   storage:{session:storage(stored),local:storage(persistent),onChanged:{addListener:fn=>events.push(fn)}},
-  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{nativeActions.push(payload.action);if(payload.action==='poll'){polls++;return {messages:mailbox,helperVersion:'1.5',protocol:1};}return {ok:true,helperVersion:'1.5',protocol:1};}},
+  permissions:{contains:async()=>true},runtime:{id:'test',getURL:path=>'chrome-extension://test/'+path,getPlatformInfo:async()=>({os:'win'}),sendNativeMessage:async(name,payload)=>{nativeActions.push(payload.action);if(payload.action==='poll'){polls++;return {messages:mailbox,helperVersion:'1.6',protocol:1};}return {ok:true,helperVersion:'1.6',protocol:1};}},
   tabs:{get:async()=>({url}),onRemoved:{addListener(){}},onUpdated:{addListener(){}}}
 }};
 vm.createContext(context);for(const file of ['mail-core.js','mail-assist.js'])vm.runInContext(await read(file),context);
@@ -34,13 +34,13 @@ const diagnostic=MailCore.inspect([{...good,to:['different@163.com']},{...good,s
 assert.equal(diagnostic.rejected.recipient,1);assert.equal(diagnostic.rejected.purpose,1);
 assert.ok(!JSON.stringify(diagnostic).includes('123456')&&!JSON.stringify(diagnostic).includes('@'));
 let nativeSince;const originalNative=context.chrome.runtime.sendNativeMessage;
-context.chrome.runtime.sendNativeMessage=async(name,payload)=>{nativeSince=payload.since;return {messages:[],helperVersion:'1.5',protocol:1};};
+context.chrome.runtime.sendNativeMessage=async(name,payload)=>{nativeSince=payload.since;return {messages:[],helperVersion:'1.6',protocol:1};};
 await context.mailMessages({provider:'163',email:'test@163.com'},imapRequest);
 assert.equal(nativeSince,Math.floor(imapRequest.startedAt/1000)*1000,'Native prefilter must use the same precision as the matcher');
 context.chrome.runtime.sendNativeMessage=originalNative;
 context.chrome.runtime.sendNativeMessage=async()=>({ok:true,version:'1.1'});
 await assert.rejects(()=>context.mailNative({action:'status'}),/mail.version/);
-context.chrome.runtime.sendNativeMessage=async()=>({ok:true,helperVersion:'1.5',protocol:2});
+context.chrome.runtime.sendNativeMessage=async()=>({ok:true,helperVersion:'1.6',protocol:2});
 await assert.rejects(()=>context.mailNative({action:'status'}),/mail.version/);
 context.chrome.runtime.sendNativeMessage=originalNative;
  persistent.mailConnection={lastError:'mail.version'};
@@ -172,3 +172,29 @@ await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.i
 arm=await context.mailAutoControl(7,{...control,action:'mailAutoArm',reset:true});time+=5000;persistent.mailAutoVerify=false;
 await assert.rejects(()=>context.mailAutoControl(7,{...control,autoId:arm.auto.id,action:'mailAutoCommit'}),/mail.stale/);
 console.log('PASS: auto verification default-off, five-second arm, persistent pause, full restart, unique candidate, owner isolation, disarm, duplicate prevention and no saved codes.');
+
+// Privacy regressions: header-only exclusions and explicit metadata retention.
+await context.mailAuthorize(gmail);
+const savedFetch=context.fetch,bodyReads=[];
+context.fetch=async(url,options)=>{
+ if(url.includes('messages?'))return {ok:true,json:async()=>({messages:['ordinary','wrong-recipient','old','shared'].map(id=>({id}))})};
+ const id=new URL(url).pathname.split('/').pop();
+ const data={internalDate:String(id==='old'?time-5000:time),payload:{headers:[{name:'From',value:sharedMail.from},{name:'To',value:id==='wrong-recipient'?'other@gmail.com':gmail.email},{name:'Subject',value:id==='ordinary'?'IRCC newsletter':sharedMail.subject}],mimeType:'text/plain',body:{data:btoa(good.text)}}};
+ if(url.includes('format=full'))bodyReads.push(id);
+ return {ok:true,json:async()=>data};
+};
+const minimized=await context.mailMessages(gmail,{startedAt:time-1000});
+assert.deepEqual(bodyReads,['shared']);assert.equal(minimized.length,1);
+context.fetch=savedFetch;
+const originalTime=time;
+persistent['mailPending:expired']={startedAt:time-86400000,state:'paused'};
+persistent['mailPending:completed']={startedAt:time-86400001,state:'completed'};
+persistent['mailPending:malformed']={state:'waiting'};
+persistent['mailPending:recent']={startedAt:time-1000,state:'paused'};
+persistent.unrelated='keep';
+await context.mailPrune();
+for(const id of ['expired','completed','malformed'])assert.equal(persistent['mailPending:'+id],undefined);
+assert.ok(persistent['mailPending:recent']);assert.equal(persistent.unrelated,'keep');
+await context.mailRemember({id:'synthetic',tabId:7,profileId:'A',startedAt:time,code:'SYNTHETIC-SECRET',text:'SYNTHETIC-BODY'},'paused');
+assert.equal(persistent['mailPending:A'].code,undefined);assert.equal(persistent['mailPending:A'].text,undefined);
+console.log('PASS: headers precede body reads; ordinary/old/wrong-recipient messages never fetch bodies; continuation allowlist and 24-hour cleanup.');

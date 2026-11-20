@@ -35,10 +35,32 @@
     await $('mailHelperStatus').onclick();await settle();
     assert($('mailHelperState').textContent==='本机程序未连接'&&$('mailConnect').hidden,'helper failure has consistent state and no invalid connect button');
     assert($('mailPassword').value==='synthetic-app-password','helper failure preserves typed password');
-    assert($('mailExtensionId').textContent==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'&&$('mailInstallHelp').open&&$('mailInstallHelp').closest('.mail-prerequisite').querySelector('#mailHelperStatus'),'installation help expands beside helper check');
+    assert($('mailExtensionId').textContent==='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'&&!$('mailInstallHelp').hidden&&$('mailInstallHelp').closest('.mail-prerequisite').querySelector('#mailHelperStatus'),'installation steps are visible after a failed helper check');
     assert($('installerCommand').textContent.includes("-ExtensionId 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'")&&$('installerCommand').textContent.includes('Get-FileHash')&&!$('installerCopy').disabled,'copy command includes extension ID and pinned integrity check');
+    assert([...w.document.querySelectorAll('button')].some(b=>b.id==='installerDownload')&&$('installerCommand').textContent.includes('OpenFileDialog')&&!$('installerCommand').textContent.includes('Invoke-WebRequest'),'helper update uses a bundled installer rather than an older remote pin');
     assert(!$('mailSetupGuide').hasAttribute('href')&&!$('aboutHelp').hasAttribute('target'),'help navigation does not create new tabs');
-    w=await load('/settings.html');await settle();
+    for(const lang of ['zh','en']){
+      frame.style.width='350px';w=await load('/settings.html?mail=version&lang='+lang);await settle();
+      assert($('installerDownload').textContent===(lang==='en'?'Update helper':'升级本机程序')&&!$('installerDownload').closest('details'),'incompatible helper exposes a direct update action in '+lang);
+      let installerDownloads=[];w.HTMLAnchorElement.prototype.click=function(){installerDownloads.push(this.download);};
+      assert(w.__helperChecks===0,'rendering upgrade state does not launch the helper in '+lang);
+      assert($('mailHelperVersion').textContent.includes('1.5')&&$('mailHelperVersion').textContent.includes('1.6'),'upgrade explains current and required versions in '+lang);
+      $('mailEditPassword').click();$('mailPassword').value='synthetic-kept-draft';
+      if(!$('mailInstallHelp').hidden)$('mailSetupGuide').click();
+      $('mailSetupGuide').scrollIntoView({block:'center'});const stepRect=$('mailSetupGuide').getBoundingClientRect();
+      assert(w.document.elementFromPoint(stepRect.left+stepRect.width/2,stepRect.top+stepRect.height/2)?.closest('button')===$('mailSetupGuide'),'View steps hit target does not overlap download controls in '+lang);
+      $('mailSetupGuide').click();assert(!$('mailInstallHelp').hidden&&installerDownloads.length===0,'View steps opens guidance without any download in '+lang);
+      $('mailSetupGuide').click();assert($('mailInstallHelp').hidden&&installerDownloads.length===0,'Hide steps never downloads in '+lang);
+      $('installerDownload').click();assert(!$('mailInstallHelp').hidden&&installerDownloads.length===0,'Update entry opens instructions only in '+lang);
+      assert($('installerFileDownload').classList.contains('primary')&&!$('installerCopy').classList.contains('primary'),'explicit file download is the first guided action in '+lang);
+      $('installerFileDownload').click();assert(installerDownloads.length===1&&installerDownloads[0]==='IRCCMailSetup-1.6.ps1','only the explicit download button requests one file in '+lang);
+      assert($('installerCopy').classList.contains('primary')&&!$('installerFileDownload').classList.contains('primary'),'copy becomes primary after requesting the file in '+lang);
+      $('mailSetupGuide').click();$('mailSetupGuide').click();assert(installerDownloads.length===1&&$('installerFeedback').textContent==='','reopening steps neither repeats download nor replays old download feedback in '+lang);
+      await $('installerCopy').onclick();assert(installerDownloads.length===1,'copy or clipboard fallback never downloads in '+lang);
+      assert($('mailPassword').value==='synthetic-kept-draft'&&w.__helperChecks===0,'installation guidance preserves drafts and never runs the helper in '+lang);
+      assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,'flat helper card fits 350px in '+lang);
+    }
+    frame.style.width='800px';w=await load('/settings.html');await settle();
     $('mailEnabled').checked=true;$('mailEnabled').onchange();$('mailEmail').value='example@163.com';$('mailPassword').value='synthetic-app-password';
     $('mailHelperStatus').onclick();await settle();await settle();
     assert($('mailHelperState').textContent==='本机程序可用'&&$('mailEnabled').checked&&$('mailEmail').value==='example@163.com'&&$('mailPassword').value==='synthetic-app-password','helper success preserves unsaved setup and enables next step');
@@ -167,7 +189,7 @@
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared&autoVerify=1');await new Promise(r=>setTimeout(r,7400));
     assert(w.__mailVerifyCount===1,'automatic code verification submits once after five seconds');
     w=await load('/popup.html?surface=panel&stage=results');await settle();
-    assert(w.document.getElementById('updates').textContent.includes('IRCC 最后更新（History）：2026-10-29'),'comparison uses newest applicant History date, independently of query time and explicit metadata');
+    assert(w.document.getElementById('updates').textContent.includes('History 最新记录时间：2026-10-29'),'comparison uses newest applicant History date, independently of query time and explicit metadata');
     const personUpdates=[...w.document.querySelectorAll('.person-updated')].map(node=>node.textContent);
     assert(personUpdates[0].includes('2026-10-28')&&personUpdates[1].includes('2026-10-29'),'each applicant row displays its own latest History date');
     w=await load('/workspace.html?surface=panel&mail=connected&stage=verification&poll=shared&autoVerify=1&lang=en');await new Promise(r=>setTimeout(r,2100));
@@ -221,6 +243,50 @@
     await w.chrome.storage.local.set({uiLanguage:'en'});await settle();
     assert(usageSettings.document.getElementById('usage').textContent.includes('Official information takes precedence')&&usageSettings.document.documentElement.scrollWidth===usageSettings.document.documentElement.clientWidth,'English usage notice fits a narrow panel');
     assert(!usageSettings.document.querySelector('#usage input[type="checkbox"]'),'usage notice introduces no mandatory consent checkbox');
+    for(const lang of ['zh','en']){
+      frame.style.width='350px';w=await load('/workspace.html?surface=panel&stage=verification&mail=version&lang='+lang);await settle();await settle();
+      const notice=w.document.getElementById('helperHealthNotice');
+      assert(!notice.hidden&&notice.textContent.includes('1.5')&&notice.textContent.includes('1.6'),'workspace header reports incompatible helper in '+lang);
+      assert(w.__healthChecks===1,'embedded views share one workspace health check in '+lang);
+      const queryFrame=w.document.querySelector('iframe[data-view="popup.html"]');queryFrame.contentDocument.getElementById('code').value='123456';
+      for(let wait=0;wait<25&&!queryFrame.contentDocument.querySelector('#mailAssistStatus details');wait++)await settle();
+      const helperDetail=queryFrame.contentDocument.querySelector('#mailAssistStatus details');assert(helperDetail&&!helperDetail.open&&helperDetail.textContent.includes('1.6'),'verification helper details agree on version 1.6 and remain collapsed in '+lang);
+      notice.querySelector('button').click();await settle();await settle();
+      const settingsFrame=w.document.querySelector('iframe[data-view="settings.html"]'),settingsDoc=settingsFrame.contentDocument;
+      assert(!settingsFrame.hidden&&settingsFrame.contentWindow.location.hash==='#mailHelperDetails','header action opens the helper card in the existing workspace in '+lang);
+      assert(settingsDoc.getElementById('mailHelperDetails').getBoundingClientRect().top<settingsFrame.contentWindow.innerHeight,'helper deep link reveals the actual visible card in '+lang);
+      w.document.querySelector('[data-view="popup.html"]').click();await settle();assert(queryFrame.contentDocument.getElementById('code').value==='123456','header recovery preserves the code draft in '+lang);
+      assert(w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth,'health notice fits narrow workspace in '+lang);
+      w.__helperHealthState='ready';w.dispatchEvent(new w.Event('helperHealthRefresh'));await settle();assert(notice.hidden,'successful compatibility evidence clears the warning in '+lang);
+      w.__helperHealthState='unavailable';w.dispatchEvent(new w.Event('helperHealthRefresh'));await settle();assert(notice.dataset.state==='unavailable'&&!notice.hidden,'unreachable helper is not labeled missing or outdated in '+lang);
+      const data=(await w.chrome.storage.local.get('mailAssist')).mailAssist;await w.chrome.storage.local.set({mailAssist:{...data,enabled:false}});await settle();assert(notice.hidden,'disabling 163 assistance clears header warning in '+lang);
+    }
+    for(const lang of ['zh','en']){
+      frame.style.width='350px';w=await load('/workspace.html?surface=panel&stage=verification&lang='+lang);await settle();await settle();
+      const queryView=w.document.querySelector('iframe[data-view="popup.html"]');queryView.contentDocument.getElementById('code').value='123456';let externalTabs=0;w.chrome.tabs.create=async()=>{externalTabs++;return {id:99};};
+      w.document.querySelector('[data-view="links.html"]').click();await settle();await settle();
+      const linksView=w.document.querySelector('iframe[data-view="links.html"]'),linksDoc=linksView.contentDocument;
+      assert(!linksView.hidden&&w.document.querySelector('[data-view="links.html"]').getAttribute('aria-current')==='page','Useful links is an internal selected tab in '+lang);
+      assert(linksDoc.querySelectorAll('.resource-link').length===11&&linksDoc.getElementById('atipHeading')&&linksDoc.getElementById('accountsHeading'),'official links are grouped by account, ATIP and status/contact in '+lang);
+      const agencyCards=[...linksDoc.querySelectorAll('#atipHeading + .help + .resource-grid .resource-link')];assert(agencyCards.length===3&&agencyCards.some(a=>a.href==='https://atip-aiprp.tbs-sct.gc.ca/'&&a.textContent.includes('CBSA'))&&agencyCards.some(a=>a.href.includes('/security-intelligence-service/')),'ATIP separates IRCC, CBSA and CSIS guidance in '+lang);
+      const nav=w.document.querySelector('.workspace-header .app-nav'),navRect=nav.getBoundingClientRect(),tabRects=[...nav.querySelectorAll('[data-view]')].map(b=>b.getBoundingClientRect());
+      for(const r of tabRects.filter((r,i)=>i===0||Math.abs(r.top-tabRects[i-1].top)>2))assert(Math.abs(r.left-navRect.left)<2,'each tab row starts at the left edge in '+lang);
+      assert(tabRects.at(-1).right<navRect.right-16,'tabs remain compact instead of evenly distributed in '+lang);
+      const destinations=[...linksDoc.querySelectorAll('a[href^="https://"]')];assert(destinations.every(a=>a.target==='_blank'&&a.rel.includes('noopener')&&a.rel.includes('noreferrer')&&a.referrerPolicy==='no-referrer'),'external links protect opener and referrer in '+lang);
+      assert(destinations.every(a=>!a.href.includes('DEMO0001')&&!a.href.includes('12345678')&&!a.href.includes('reqId=')),'external destinations carry no profile or authentication session in '+lang);
+      linksDoc.querySelector('[href="#atipHeading"]').click();await settle();assert(linksView.contentWindow.location.hash==='#atipHeading'&&linksDoc.getElementById('atipHeading').getBoundingClientRect().top<200,'category shortcut reveals ATIP directly in '+lang);
+      let clicked=null;linksView.contentWindow.HTMLAnchorElement.prototype.click=function(){clicked={href:this.href,target:this.target};};linksDoc.querySelector('a.resource-link').click();assert(clicked.href==='https://prson-srpel.apps.cic.gc.ca/en/login'&&clicked.target==='_blank','explicit external action targets official PR Portal in '+lang);
+      const entryCalls=[],originalSend=w.chrome.runtime.sendMessage;w.chrome.runtime.sendMessage=async message=>{if(message.action==='openTrackerPage')entryCalls.push(message);return originalSend(message);};
+      const trackerButton=linksDoc.getElementById('trackerLoginLink');await Promise.all([trackerButton.onclick(),trackerButton.onclick()]);
+      assert(entryCalls.length===1&&entryCalls[0].windowId===1&&entryCalls[0].resume===true&&!entryCalls[0].forceNew,'Tracker sign-in shares the current-window resolver and suppresses double clicks in '+lang);
+      assert(!trackerButton.disabled&&linksDoc.getElementById('trackerLinkStatus').textContent.length>0,'Tracker entry reports its result and restores the control in '+lang);w.chrome.runtime.sendMessage=originalSend;
+      assert(externalTabs===0&&w.document.documentElement.scrollWidth===w.document.documentElement.clientWidth&&linksDoc.documentElement.scrollWidth===linksDoc.documentElement.clientWidth,'tab switching creates no browser tabs and fits 350px in '+lang);
+      w.chrome.runtime.sendMessage=async message=>message.action==='openTrackerPage'?{needsAccess:true}:originalSend(message);await trackerButton.onclick();await settle();assert(!queryView.hidden&&externalTabs===0,'unassociated Tracker goes to Query recovery without a new tab in '+lang);w.chrome.runtime.sendMessage=originalSend;
+      w.document.querySelector('[data-view="settings.html"]').click();await settle();await settle();const settingView=w.document.querySelector('iframe[data-view="settings.html"]');settingView.contentDocument.getElementById('backupPassword').value='synthetic-draft';
+      w.document.querySelector('[data-view="links.html"]').click();await settle();assert(w.document.querySelectorAll('iframe[data-view="links.html"]').length===1,'Useful links view is retained rather than recreated in '+lang);
+      w.document.querySelector('[data-view="settings.html"]').click();await settle();assert(settingView.contentDocument.getElementById('backupPassword').value==='synthetic-draft','Useful links round trip preserves unsaved settings in '+lang);
+      w.document.querySelector('[data-view="popup.html"]').click();await settle();assert(queryView.contentDocument.getElementById('code').value==='123456','Useful links round trip preserves verification input in '+lang);
+    }
     report.textContent='ALL PASSED\n'+results.join('\n');document.title='PASS local Tracker checks';
   }catch(error){report.textContent='FAILED '+error.message+'\n'+results.join('\n');document.title='FAIL local Tracker checks';}
 })();

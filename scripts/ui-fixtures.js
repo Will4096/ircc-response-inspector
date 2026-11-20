@@ -16,7 +16,7 @@
   if(stage!=='results' || empty)capture={active:false,status:'idle',application:{},applicants:[],responses:[]};
   if(countdown)capture.status='countdown';
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
-  const nativeReady=mail!=='error';let configured=!!mail,verifiedAt=mail?Date.now():null;
+  const nativeReady=mail!=='error'&&mail!=='version';window.__helperChecks=0;window.__helperHealthState=query.get('health')||(mail==='version'?'upgrade':nativeReady?'ready':'unavailable');let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
   window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'4.3.2'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
@@ -26,8 +26,9 @@
       case 'switchTrackerProfile':window.__profileSwitchCount=(window.__profileSwitchCount||0)+1;stage='profileSwitch';autoPending=null;verifyAuto=null;capture={active:false,status:'idle',application:{},applicants:[],responses:[]};return {ok:true,tabId:1};
       case 'resolveTrackerTab':return {tabId:authGranted?1:undefined};
       case 'openTrackerPage':return !authGranted&&!message.forceNew?{needsAccess:true}:{ok:true,tabId:1};
-      case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
-      case 'mailHelperStatus':return nativeReady?{ok:true,configured}:{error:'mail.helper'};
+      case 'mailHealth':window.__healthChecks=(window.__healthChecks||0)+1;return !data.mailAssist.enabled||data.mailAssist.provider!=='163'?{status:'off'}:{status:window.__helperHealthState,version:mail==='version'?'1.5':'1.6',required:'1.6',checkedAt:Date.now()};
+      case 'mailSettings':return {config:data.mailAssist,connection:{authReady:mail!=='reauth',helperReady:nativeReady,helperVersion:mail==='version'?'1.5':nativeReady?'1.6':undefined,helperProtocol:1,error:mail==='version'?'mail.version':null,configured,verifiedAt},extensionId:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',redirect:'https://synthetic-preview.chromiumapp.org/gmail'};
+      case 'mailHelperStatus':window.__helperChecks++;return nativeReady?{ok:true,configured}:{error:mail==='version'?'mail.version':'mail.helper'};
       case 'mailSetup163':configured=true;verifiedAt=Date.now();return {ok:true};
       case 'mailAuthorize':verifiedAt=Date.now();return {ok:true};
       case 'mailSave':changes({mailAssist:message.config});return {ok:true};
@@ -41,7 +42,7 @@
       case 'mailAutoResume':verifyPaused=false;verifyAuto=null;return {ok:true};
       case 'mailConfirm':case 'mailAutoCommit':window.__mailVerifyCount++;verifyPaused=true;verifyAuto=null;stage='results';capture.status='completed';return {ok:true};
       case 'mailCheck':
-      case 'mailPoll':return data.mailAssist.enabled?(query.get('poll')==='shared'?{status:'candidates',requestId:'synthetic-request',profileId:'demo-a',autoEnabled:data.mailAutoVerify,autoPaused:verifyPaused,auto:verifyAuto?{...verifyAuto}:null,candidates:[{id:'synthetic-mail',code:'123456',purpose:'TrackerAccountConfirmation',receivedAt:1}]}:{status:query.get('poll')||'waiting',checkedAt:Date.now(),diagnostic:{checked:0,rejected:{}}}):{status:'off'};
+      case 'mailPoll':return data.mailAssist.enabled?(mail==='version'?{status:'mail.version',helper:{version:'1.5',protocol:1}}:query.get('poll')==='shared'?{status:'candidates',requestId:'synthetic-request',profileId:'demo-a',autoEnabled:data.mailAutoVerify,autoPaused:verifyPaused,auto:verifyAuto?{...verifyAuto}:null,candidates:[{id:'synthetic-mail',code:'123456',purpose:'TrackerAccountConfirmation',receivedAt:1}]}:{status:query.get('poll')||'waiting',checkedAt:Date.now(),diagnostic:{checked:0,rejected:{}}}):{status:'off'};
       case 'stop':capture={...capture,active:false,status:'stopped'};return {ok:true};
       case 'fill':capture={...capture,status:'ready'};return {ok:true,message:'请确认申请信息，点击 Submit 后继续。'};
       case 'start':case 'verify':capture={...capture,active:true,status:'capturing'};setTimeout(()=>{capture={...capture,active:false,status:'completed'};stage='results';},900);return {ok:true};

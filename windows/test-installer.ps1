@@ -1,8 +1,9 @@
+param([string]$PythonExecutable)
 $ErrorActionPreference = 'Stop'
 # Compile the exact installer launcher into the workspace, without installing,
 # touching registry, fetching packages or opening an actual mailbox.
-$pythonExe = Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe'
-if (-not (Test-Path -LiteralPath $pythonExe)) { throw 'Python 3.13 is required for offline tests.' }
+$pythonExe = if ($PythonExecutable) { $PythonExecutable } else { Join-Path $env:LOCALAPPDATA 'Programs\Python\Python313\python.exe' }
+if (-not (Test-Path -LiteralPath $pythonExe)) { throw 'Provide a Python interpreter for offline tests.' }
 $testRoot = Join-Path (Split-Path $PSScriptRoot -Parent) '.tmp-mail-helper'
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 $pythonLiteral = $pythonExe.Replace('"','""')

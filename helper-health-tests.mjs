@@ -1,0 +1,36 @@
+import fs from 'node:fs/promises';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {webcrypto} from 'node:crypto';
+const source=await fs.readFile(new URL('mail-assist.js',import.meta.url),'utf8');
+let now=1000000000,mode='ready',permission=true,os='win',extension='4.3.2',release=null,timerCallback=null;
+const local={},session={},calls=[];
+class Clock extends Date{static now(){return now;}}
+const storage=db=>({get:async key=>key===null?{...db}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in db).map(k=>[k,db[k]])),set:async values=>Object.assign(db,structuredClone(values)),remove:async keys=>{for(const key of Array.isArray(keys)?keys:[keys])delete db[key];}});
+const c={Date:Clock,URL,Map,Set,crypto:webcrypto,setTimeout:fn=>{timerCallback=fn;return 1;},clearTimeout:()=>{},chrome:{storage:{local:storage(local),session:storage(session),onChanged:{addListener(){}}},permissions:{contains:async()=>permission},runtime:{getURL:p=>'chrome-extension://test/'+p,getManifest:()=>({version:extension}),getPlatformInfo:async()=>({os}),sendNativeMessage:async(name,payload)=>{calls.push(payload.action);assert.equal(JSON.stringify(payload),JSON.stringify({action:'status'}));if(mode==='hang')await new Promise(r=>release=r);if(mode==='missing')throw Error('Specified native messaging host not found.');if(mode==='failure')throw Error('Native host has exited.');return {ok:true,configured:true,helperVersion:mode==='old'?'1.5':'1.6',protocol:1};}},tabs:{onRemoved:{addListener(){}},onUpdated:{addListener(){}}}}};
+vm.createContext(c);vm.runInContext(source,c);
+assert.equal((await c.mailHealth()).status,'off');
+local.mailAssist={enabled:true,provider:'gmail'};assert.equal((await c.mailHealth()).status,'off');
+local.mailAssist={enabled:true,provider:'163'};permission=false;assert.equal((await c.mailHealth()).status,'permission');
+permission=true;os='mac';assert.equal((await c.mailHealth()).status,'unsupported');assert.equal(calls.length,0);os='win';
+let results=await Promise.all([c.mailHealth(),c.mailHealth(),c.mailHealth()]);assert.ok(results.every(r=>r.status==='ready'));assert.equal(calls.length,1);
+await c.mailHealth();assert.equal(calls.length,1,'Healthy results cached for five minutes');
+now+=300001;await c.mailHealth();assert.equal(calls.length,2);
+extension='4.3.3';await c.mailHealth();assert.equal(calls.length,3,'Extension update invalidates cache');
+mode='old';now+=1;assert.equal((await c.mailHealth(true)).status,'upgrade');assert.equal(session['mail:health'].version,'1.5');
+const beforeIncompatibleFetch=calls.length;await assert.rejects(()=>c.mailMessages({provider:'163',email:'synthetic@163.com'},{startedAt:now}),/mail.version/);assert.equal(calls.length,beforeIncompatibleFetch,'Known incompatible helper cannot start a mailbox poll');
+const beforeFailure=calls.length;await c.mailHealth();assert.equal(calls.length,beforeFailure);now+=60001;
+mode='failure';assert.equal((await c.mailHealth()).status,'unavailable');assert.notEqual(session['mail:health'].status,'missing');
+mode='missing';now+=1;assert.equal((await c.mailHealth(true)).status,'missing');
+mode='ready';now+=1;await c.mailNative({action:'status'});const beforeManual=calls.length;assert.equal((await c.mailHealth()).status,'ready');assert.equal(calls.length,beforeManual,'Manual check evidence reused without another launch');
+const restarted={Date:Clock,URL,Map,Set,crypto:webcrypto,setTimeout:c.setTimeout,clearTimeout:c.clearTimeout,chrome:c.chrome};vm.createContext(restarted);vm.runInContext(source,restarted);
+const beforeRestart=calls.length;assert.equal((await restarted.mailHealth()).status,'ready');assert.equal(calls.length,beforeRestart,'Worker restart reuses session compatibility cache');
+const settings=await restarted.mailHandle({action:'mailSettings'},{url:'chrome-extension://test/settings.html'});assert.equal(settings.connection.helperVersion,'1.6');assert.equal(settings.connection.helperReady,true);
+mode='hang';now+=300001;const hung=c.mailHealth(true);while(!release)await new Promise(r=>setImmediate(r));timerCallback();assert.equal((await hung).status,'unavailable');
+const duringHang=calls.length;await c.mailHealth(true);assert.equal(calls.length,duringHang,'Timed-out native invocation keeps its single-flight lock');
+local.mailAssist.enabled=false;release();await new Promise(r=>setImmediate(r));assert.equal((await c.mailHealth()).status,'off');assert.notEqual(session['mail:health']?.status,'ready','Late response cannot restore ready after disable');
+assert.ok(calls.every(action=>action==='status'),'Compatibility checks never configure/test/poll/read the mailbox');
+assert.ok(!JSON.stringify(session).includes('password'));
+console.log('PASS: opt-in gating, existing permission, Windows-only probe, single flight, TTL, extension invalidation, explicit-check reuse, missing vs unavailable vs upgrade, timeout lock, disable race and status-only transport.');
+
+await assert.rejects(()=>c.mailHandle({action:'mailHealth'},{url:'https://ircc-services.canada.ca/2/ast-search'}),/mail.permission/);

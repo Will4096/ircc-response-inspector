@@ -1,16 +1,11 @@
-# Security / 安全说明
+# Security / 安全反馈
 
-This extension processes personal application data locally. It has no developer-operated server, telemetry or analytics. The `debugger` permission is powerful: code limits its use to an official Tracker tab and detaches when the operation ends or the tab leaves Tracker. Do not install modified copies from unknown sources.
+No developer-operated data backend, analytics or telemetry. Personal records are processed locally, with communication to official IRCC and optional mailbox services. Local storage is not an encrypted vault. Debugger access is powerful and restricted to the selected Tracker operation. Do not install unknown modified copies.
 
-Raw response exports can contain personal details even after known authentication fields are redacted. Never post unredacted exports, UCI/application numbers, dates of birth, verification codes, tokens, cookies or browser-profile files in a public issue.
+Ordinary reports: https://github.com/Will4096/ircc-response-inspector/issues . Include versions, steps and synthetic/redacted examples only. Never post credentials, codes, cookies, raw personal exports or browser profiles. For vulnerabilities use https://github.com/Will4096/ircc-response-inspector/security/advisories/new if available. Otherwise request a private contact method without disclosing exploit or personal details. The maintainer must verify repository-side availability before inviting sensitive submissions; no dedicated private support inbox or response deadline is currently promised.
 
-For an ordinary bug report, use the repository Issues page and include only the extension version, browser version, reproduction steps and synthetic/redacted examples. No private vulnerability-reporting channel has been configured yet; do not post exploit details or real personal data publicly. Contact the maintainer through their public GitHub profile to arrange an appropriate private channel first.
+邮箱辅助和自动验证默认分别关闭；已包含在项目中，不局限于旧功能分支。Gmail 只读权限覆盖整个邮箱；程序先检查有限邮件头，再读取候选正文，读取后仍可能排除。Windows helper 使用 DPAPI、只读 IMAP 和校验证书的 TLS，按单次操作启动退出。浏览器数据清理与卸载 helper 是独立操作，详见隐私政策。
 
-本扩展在本机处理申请资料，不使用开发者服务器或遥测。`debugger` 权限能力较强，代码只在官方 Tracker 标签页中使用，并在操作结束或离开 Tracker 时断开。不要安装不明来源的修改版。
+公开反馈仅提供版本、操作步骤和合成或脱敏示例。敏感问题优先使用上面的可用私密入口；不可用时只请求私下联系方式，不公开漏洞细节或个人资料。不要提交 OAuth token、client secret、授权码、正文或验证码。已知认证字段脱敏不是匿名化；分享前还需检查姓名、编号、日期、History 等。加密不能代替脱敏。
 
-公开反馈只包含版本、复现步骤及脱敏示例。不要上传真实导出、编号、出生日期、验证码、token、cookie 或浏览器资料目录。尚未配置私人漏洞报告渠道，敏感问题请先通过维护者的公开 GitHub 主页协商私下联系方法。
-
-
-## Mail preview / 邮箱辅助预览
-
-Default-off optional mailbox access is confined to the feature branch. Do not put OAuth tokens, client secrets, app passwords, message bodies or codes in issues, fixtures, commits or exports. The 163 helper uses Windows DPAPI and read-only IMAP. Uninstall its independent Windows component when no longer needed; extension removal alone does not remove it. Gmail readonly authorizes the mailbox, even though queries are filtered. Real-provider tests and review are required before merging.
+See [Privacy](PRIVACY.md), [email setup](MAIL-SETUP.en.md) and [release gates](PUBLISHING.md). Provider review, service terms and real-provider integration remain separate from offline security tests.

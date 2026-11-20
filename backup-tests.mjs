@@ -70,3 +70,11 @@ console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge 
   await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'}),/export.changed/);assert.equal(downloads,2);transfer.encryptRaw=encrypt;
   console.log('PASS: shared raw export service, plain/encrypted output and no file after cancellation or query changes during encryption.');
 }
+
+// Both export formats must scrub historic captures, not only new captures.
+const auditStore={'capture:profile:demo-a':{profileId:'demo-a',profileVerified:true,application:{number:'DEMO0001'},startedAt:'2026-11-17T12:00:00Z',responses:[{url:'https://ircc-services.canada.ca/api?token=SYNTHETIC-TOP',page:'/2/ast-details?session=SYNTHETIC-PAGE',json:{next:'https://example.invalid/next?reqId=SYNTHETIC-NESTED',history:[{key:'Security',actStatus:'17'}]}}]}};
+const safeRaw=transfer.latestRaw(local,auditStore,'demo-a');
+assert.ok(!JSON.stringify(safeRaw).includes('SYNTHETIC-'));
+const roundtrip=await transfer.decryptRaw(await transfer.encryptRaw(safeRaw,'synthetic-password-2026'),'synthetic-password-2026');
+assert.ok(!JSON.stringify(roundtrip).includes('SYNTHETIC-'));assert.equal(roundtrip.responses[0].json.history[0].actStatus,'17');
+console.log('PASS: historic raw captures scrub nested/page URL parameters in plain and encrypted exports.');

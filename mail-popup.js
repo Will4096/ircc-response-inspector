@@ -87,8 +87,12 @@
           for(const [reason,count] of Object.entries(data.diagnostic.rejected||{}))if(reasons[reason])node('p',say(...reasons[reason])+' · '+count,detail);
         }
         if(['unbound','expired'].includes(data.status)){const restart=node('button',say('重新开始自动收码','Restart automatic code retrieval'));restart.type='button';restart.onclick=async()=>{try{await chrome.tabs.update(targetTabId,{active:true,url:'https://ircc-services.canada.ca/2/ast-search'});}catch{setOutput('验证未完成，请检查验证码后重试。');}};}
-        if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp('settings.html#mailHeading');}
-        if(data.status==='mail.version')node('small',say('浏览器收到的版本：','Version received by browser: ')+(data.helper?.version||say('未提供','not supplied'))+say('；协议：','; protocol: ')+(data.helper?.protocol??say('未提供','not supplied'))+say('。要求：1.5 或更高的 1.x，协议 1。','Required: 1.x version 1.5 or later, protocol 1.'));
+        if(data.status.startsWith('mail.')){const link=node('button',say('前往设置','Open settings'));link.type='button';link.onclick=()=>navigateApp(['mail.version','mail.helper','mail.windows'].includes(data.status)?'settings.html#mailHelperDetails':'settings.html#mailHeading');}
+        if(data.status==='mail.version'){
+          const detail=node('details');node('summary',say('本机程序详情','Local helper details'),detail);
+          node('p',say('浏览器收到的版本：','Version received by browser: ')+(data.helper?.version||say('未提供','not supplied')),detail);
+          node('p',say('协议：','Protocol: ')+(data.helper?.protocol??say('未提供','not supplied'))+say('。要求：1.6 或更高的兼容 1.x 版本，协议 1。','; required: compatible 1.x version 1.6 or later, protocol 1.'),detail);
+        }
         if(data.status==='mail.helper'&&data.helper?.reason)node('small','Chrome: '+data.helper.reason);
         return;
       }

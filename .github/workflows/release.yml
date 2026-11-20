@@ -2,10 +2,6 @@ name: Publish release
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/release.yml'
     tags:
       - 'v*'
 
@@ -44,7 +40,10 @@ jobs:
           node comparison-tests.mjs
           node i18n-tests.mjs
           node privacy-tests.mjs
+          node scripts/build-privacy.mjs --check
           node mail-tests.mjs
+          node helper-health-tests.mjs
+          node installer-policy-tests.mjs
           node mail-content-tests.mjs
           node ui-tests.mjs
           node backup-tests.mjs
@@ -52,6 +51,7 @@ jobs:
           node search-submit-tests.mjs
           node official-update-tests.mjs
           python3 windows/test_mail_host.py
+          node scripts/test-build.mjs
 
       - name: Verify version, archive and notes
         run: |
@@ -60,6 +60,9 @@ jobs:
           test "$RELEASE_TAG" = "v$VERSION"
           test -f "release-notes/$RELEASE_TAG.md"
           (cd downloads && sha256sum --check "ircc-response-inspector-v$VERSION.zip.sha256")
+
+      - name: Rebuild archive from checked-out source
+        run: node scripts/build-release.mjs --verify
 
       - name: Create release with verified assets, then publish
         env:

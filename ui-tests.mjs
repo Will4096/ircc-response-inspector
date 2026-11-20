@@ -27,7 +27,7 @@ assert.equal(ui.mail(config,connection,{...config,hasPassword:true}).state,'setu
 assert.equal(ui.mail(config,connection,{...config,email:'other@163.com'}).state,'setup');
 assert.equal(ui.mail({...config,provider:'gmail'},{authReady:false},{...config,provider:'gmail'}).state,'reauth');
 // All three surfaces share navigation and styles; destructive controls cannot leak into profile/query pages.
-for(const file of ['popup.html','options.html','settings.html']){
+for(const file of ['popup.html','options.html','settings.html','links.html']){
   const html=await read(file);assert.ok(html.includes('app.css'));assert.ok(html.includes('aria-current="page"'));
   const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);assert.equal(ids.length,new Set(ids).size);
   for(const m of html.matchAll(/(?:src|href)="([^"#?]+)"/g))if(!/^https?:/.test(m[1]))await fs.access(new URL(m[1],import.meta.url));
@@ -44,3 +44,10 @@ const c={chrome:{storage:{onChanged:{addListener(){}}}}};vm.createContext(c);vm.
 c.chrome.storage.local={get:async()=>({uiLanguage:'en'})};await c.I18n.init();
 for(const file of ['ui-model.js','mail-options.js','backup-ui.js','raw-export.js','options.js','settings.js'])for(const match of (await read(file)).matchAll(/'([^'\n]*[\u3400-\u9fff][^'\n]*)'/g))assert.notEqual(c.I18n.t(match[1]),match[1],file+': '+match[1]);
 console.log('PASS: query action model, connection/setup/expired states, shared navigation and styling, progressive settings, isolated destructive actions, asset links, and complete state-copy translation.');
+
+assert.equal(ui.helper({error:'mail.version'}).action,'升级本机程序');
+assert.equal(ui.helper({helperReady:false,helperFailure:'not-found'}).action,'安装本机程序');
+assert.equal(ui.helper({helperReady:true}).state,'ready');
+assert.equal(ui.helper({error:'mail.windows'}).disabled,true);
+assert.equal(ui.helper({}).state,'unknown');
+assert.equal(ui.mail(config,{helperReady:false,error:'mail.version'},config).label,'需要升级');
