@@ -3,7 +3,8 @@ const message=document.getElementById('message'),automatic=document.getElementBy
 let messageSource='',generalSource='',busy=false;
 function setMessage(source,tone='info'){messageSource=source || '';message.textContent=msg(messageSource);message.dataset.tone=tone;}
 function general(source){generalSource=source;document.getElementById('generalStatus').textContent=t(source);}
-document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+' · '+t('开发预览');
+document.getElementById('settingsBrandVersion').textContent='v'+chrome.runtime.getManifest().version;
+document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+(chrome.runtime.getManifest().version_name?.includes('preview')?' · '+t('开发预览'):'');
 chrome.storage.local.get('autoFill').then(data=>{automatic.checked=!!data.autoFill;}).catch(error=>setMessage(error.message,'error'));
 const autoVerify=document.getElementById('mailAutoVerify');
 chrome.storage.local.get('mailAutoVerify').then(data=>{autoVerify.checked=data.mailAutoVerify===true;}).catch(error=>setMessage(error.message,'error'));
@@ -12,11 +13,15 @@ automatic.onchange=async()=>{
   automatic.disabled=true;try{await chrome.storage.local.set({autoFill:automatic.checked});general('已保存');}catch(error){automatic.checked=!automatic.checked;setMessage(error.message,'error');}finally{automatic.disabled=false;}
 };
 document.getElementById('clearData').onclick=async()=>{
-  if(busy || !confirm(t('清除所有本地申请资料、查询缓存及对比记录？已导出的文件不会删除。')))return;
+  if(busy || !confirm(t('清除浏览器内申请、偏好、续接、查询及对比数据并断开邮箱？本机程序、诊断日志及已导出文件不会删除。')))return;
   busy=true;const button=document.getElementById('clearData');button.disabled=true;
   try{const result=await chrome.runtime.sendMessage({action:'clearLocalData'});if(result?.error)throw new Error(result.error);automatic.checked=false;setMessage(result.helperCleared===false?'本地数据已清除。请运行 Windows 卸载脚本清除残留邮箱授权。':'本地数据已清除。','success');}
   catch(error){setMessage(error.message,'error');}finally{busy=false;button.disabled=false;}
 };
 chrome.storage.onChanged.addListener((changes,area)=>{if(area!=='local')return;if(changes.autoFill)automatic.checked=!!changes.autoFill.newValue;if(changes.mailAutoVerify)autoVerify.checked=changes.mailAutoVerify.newValue===true;if(changes.uiLanguage)general('已保存');});
 void I18n.init().catch(error=>setMessage(error.message,'error'));
-I18n.onChange(()=>{general(generalSource);message.textContent=msg(messageSource);document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+' · '+t('开发预览');});
+I18n.onChange(()=>{general(generalSource);message.textContent=msg(messageSource);document.getElementById('settingsVersion').textContent='v'+chrome.runtime.getManifest().version+(chrome.runtime.getManifest().version_name?.includes('preview')?' · '+t('开发预览'):'');});
+
+// Deep links open the existing Settings disclosure, without a new tab or consent gate.
+function revealUsage(){if(location.hash==='#usage'){const details=document.getElementById('usage');details.open=true;requestAnimationFrame(()=>details.scrollIntoView({block:'start'}));}}
+window.addEventListener('hashchange',revealUsage);revealUsage();

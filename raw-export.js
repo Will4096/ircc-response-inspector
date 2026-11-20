@@ -36,7 +36,7 @@ var RawExport=(()=>{
     actions.append(submit,cancel);form.append(title,target,meta,formatLabel,passwords,help,warning,status,actions);dialog.append(form);document.body.append(dialog);
     Object.assign(fields,{form,title,target,meta,formatText,format,passwords,help,warning,status,submit,cancel});
     format.onchange=()=>{if(format.value==='plain'){fields.password.value='';fields.repeat.value='';}dialogSource='';paint();};cancel.onclick=()=>close();
-    dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('close',()=>{if(current)close();});
+    dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('close',()=>{if(current&&!dialog.open)close();});
     form.onsubmit=async event=>{
       event.preventDefault();if(busy||!current)return;
       const run=++generation,profileId=current.profileId;busy=true;dialogSource='';paint();

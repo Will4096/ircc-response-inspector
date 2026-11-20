@@ -1,49 +1,31 @@
-# Email code assistance · development preview
+# Optional email verification assistance
 
 [简体中文](MAIL-SETUP.md) · [English](MAIL-SETUP.en.md)
 
-Branch: `feature/mail-verification-windows`. Not merged into main or released. Assistance is off by default. Manual entry is always available. A code is submitted only after the user confirms the target profile, candidate, purpose and message time.
+Email assistance and automatic code verification are separate, default-off options. Manual entry remains available. A unique matching candidate can start a visible five-second countdown after opt-in; verify immediately or pause. Resume starts a full countdown. Failed or ambiguous codes are not automatically retried.
 
-## Enable
+## Requests and continuation
 
-Load this branch as an unpacked development extension. Open header Settings (or Chrome extension options) → Email code assistance. Choose a provider and enter the verification mailbox. Only one outstanding request per configured mailbox is retained. The extension must observe a matching Tracker application form submission; it does not guess a request timestamp from an already-open verification page. Submit the form again after enabling assistance.
+The extension preserves the observed submission time, rather than resubmitting or inventing a new time when reopened. The same associated tab in the same browser session may resume; another tab/session requires an explicit check and association. Limited metadata expires 24 hours after the original submission and is cleaned on the next worker start or mailbox operation. No bodies or codes are retained. The observation window is ten minutes, with checks about ten seconds apart; these are not official code-validity limits. Profile changes, leaving verification or disabling assistance stop new checks; in-flight work may finish before exiting.
 
 ## Gmail
 
-Create a Google Cloud OAuth client with Gmail API enabled. This preview uses the browser token flow and a Web application client configured for the HTTPS redirect URI shown in extension options (`https://<extension-id>.chromiumapp.org/gmail`). Enter the Client ID, never a client secret. Click Authorize Gmail and choose the matching account.
+Configure an OAuth client with Gmail API enabled and the HTTPS redirect URI shown in settings. Do not enter a client secret. The current browser token flow keeps access tokens in worker memory and may require authorization after restart. gmail.readonly grants mailbox-wide read access. Up to ten recent candidate headers are filtered before body reads; bodies may still fail final matching. The privacy policy includes the Google Limited Use statement.
 
-`gmail.readonly` grants mailbox-wide read access, not access limited to IRCC mail. Filtering is an application behavior. Tokens stay in worker memory; worker restart or expiry may require reauthorization. No refresh token is saved. A real OAuth project, provider configuration review, applicable Google verification and live authorization tests remain required before public release. No production credentials are included.
+Gmail remains a developer-configured feature. The publisher must document the production OAuth project, suitability of the OAuth design, applicable verification or exception, and real-provider integration tests. GitHub publication is not Google approval.
 
 ## 163 on Windows
 
-Chrome cannot silently execute an installer. Run this once from the branch source directory in Windows PowerShell 5.1, using the extension ID shown in options:
+Requires helper 1.6 or a newer compatible version, Windows Chrome and Windows PowerShell 5.1. Use Install / update helper (Update helper when incompatible) directly in the Windows helper card. This opens instructions only. Click Download installer script explicitly, then copy the command into PowerShell and select the saved file. Its hash is checked before installation. Initial setup may download Python 3.13 through winget and accept its installation agreements. No administrator rights or policy bypass is required.
 
-```powershell
-powershell.exe -NoProfile -File .\windows\install.ps1 -ExtensionId <extension-id> -InstallPython
-```
+Source installation: powershell.exe -NoProfile -File .\windows\install.ps1 -ExtensionId <extensionID> -InstallPython . The helper installs under %USERPROFILE%\.ircc-mail-helper for the current Windows user and specified extension only. It has no service or listening port and exits after each requested operation. Enabled 163 assistance with existing native permission may launch a status-only probe when a visible workspace opens (five-minute healthy cache, one-minute failure cache). It does not decrypt credentials or contact email. Header warnings link directly to helper settings.
 
-The script automatically installs and registers the per-user helper. It reuses Python 3.13/3.14 or installs Python 3.13 from the official winget package if necessary. No administrator rights, services, scheduled tasks or listening ports. It does not change execution policy. Follow applicable organizational policy if scripts are blocked.
+Enable IMAP in 163 and use an app password, not your web-login password. Current-user DPAPI protects the saved credential. INBOX is read-only with BODY.PEEK; no sending, deletion or marking messages read. Bounded headers are checked for time, sender, recipient and recognizable subject before candidate body access. The recognized shared IRCC Portal / New version account / Confirm your account template is accepted for Tracker; its account wording alone does not exclude it. Other purposes, old messages and ambiguous codes are rejected. Unsupported subjects may require manual entry. Sender matching does not authenticate the sender.
 
-Files: `%USERPROFILE%\.ircc-mail-helper`. Registration: `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.will4096.ircc_mail`. Only the specified extension ID may call it. Reinstall registration if the extension ID changes.
+## Removal and support
 
-Enable IMAP in 163 and generate a client app password. Enter it in extension options (not the web sign-in password), then click Connect 163 and enable. After a successful connection, the helper encrypts the app password with current-user Windows DPAPI. It uses verified TLS, read-only INBOX selection and BODY.PEEK; it does not send/delete mail or mark it as read.
+Disconnect removes current and known legacy credentials when the helper is available. Otherwise run its bundled uninstall.ps1. Removing the extension does not uninstall the helper. Diagnostics contain fixed stages, UTC timestamps and counts in two rotating files of about 64 KiB each; browser-data clearing keeps them, helper uninstall removes them. Delete downloaded exports and revoke provider authorization separately.
 
-Disconnect in options clears the helper's stored authorization if available. To remove the independent helper and credential file:
+Offline tests do not replace real-provider checks or platform review. Never post bodies, codes, credentials or raw personal records publicly. See [Privacy](PRIVACY.md), [Security](SECURITY.md) and [Publishing](PUBLISHING.md).
 
-```powershell
-powershell.exe -NoProfile -File .\windows\uninstall.ps1
-```
-
-Uninstalling the Chrome extension alone does not remove this component. Revoke the 163 app password at the provider when no longer needed.
-
-## Matching and limitations
-
-The current request, profile, Tracker verification page, recipient, sender domain, purpose and server arrival time must match. A sender address is not proof of authenticity. Portal registration messages are rejected. Multiple six-digit numbers in one message are not guessed; multiple distinct candidate messages require a deliberate choice. HTML-only messages and unsupported language/templates fall back to manual entry.
-
-Polling occurs about every ten seconds for at most three minutes. This is an observation timeout, not an assertion about IRCC code validity. Leaving Tracker, switching profile or disabling assistance invalidates candidates. Consumed and ignored codes are not offered again for the current request, including after worker restart. A new code can be confirmed after an unsuccessful verification.
-
-Bodies, tokens, app passwords and codes are not written to extension logs, configuration or exports. Requests and request-salted code digests are retained only in browser session storage for binding/deduplication. Do not use this feature to bypass any access denial by a browser tool or mail service.
-
-## Merge requirements
-
-Complete real Gmail authorization/revocation, 163 IMAP/template integration, and Windows installer/uninstaller tests. Verify old mail, wrong purpose, ambiguous numbers, duplicate codes, retry with a new code, profile switching, expired Tracker sessions, ignore and disabled/manual behavior. Offline tests alone do not make this ready for main.
+The command verifies the file hash and checks execution policy. Under RemoteSigned, only the selected file is unblocked after explicit confirmation. AllSigned, Restricted or unreadable policy stops installation and directs the user to a trusted signed package or administrator. No policy lowering or Bypass is performed. This unsigned script package cannot support devices requiring signed scripts.

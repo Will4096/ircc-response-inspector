@@ -10,6 +10,16 @@ var MailCore=(()=>{
     const email=String(value || '').match(/^([A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@([A-Z0-9.-]+))$/i);
     return !!email && /(?:^|\.)(?:cic\.gc\.ca|canada\.ca)$/.test(email[2].toLowerCase());
   }
+  // Reject known unrelated purposes before body access; generic titles still
+  // require bounded body inspection for Tracker context.
+  function headerAllowed(mail,request,now=Date.now()){
+    const date=Number(mail.receivedAt),earliest=request.provider==='163'?Math.floor(request.startedAt/1000)*1000:request.startedAt;
+    if(!senderAllowed(mail.from)||!Number.isFinite(date)||date<earliest||date>now+60000||!Array.isArray(mail.to)||!mail.to.some(to=>address(to)===address(request.email)))return false;
+    const subject=String(mail.subject||'');
+    const sender=String(mail.from).trim().replace(/^[^<>]*<([^<>]+)>$/,'$1');
+    const shared=/^do-not-reply-ircc-cxp-ne-pas-repondre-ircc-pxc@notification\.canada\.ca$/i.test(sender)&&/^IRCC Portal\s*[-–—]\s*New version account\s*[-–—]\s*Confirm your account(?:\s*\/|\s*$)/i.test(subject.trim());
+    return shared||(/(?:tracker|suivi|verification|v[ée]rification|one[ -]time|confirmation|security\s+code)/i.test(subject)&&!/(?:create|creating|register|registration|new)\s+(?:an?\s+)?(?:IRCC\s+)?(?:portal\s+)?account|account\s+creation|permanent\s+residen(?:ce|t)\s+portal|newsletter|news bulletin/i.test(subject));
+  }
   function inspect(messages,request,excluded=new Set(),now=Date.now()){
     const found=[],rejected={};
     const skip=reason=>{rejected[reason]=(rejected[reason]||0)+1;};
@@ -48,5 +58,5 @@ var MailCore=(()=>{
     if(provider==='gmail' && !/^[a-zA-Z0-9-]+\.apps\.googleusercontent\.com$/.test(clientId))throw new Error('mail.client');
     return {enabled:true,provider,email,clientId:provider==='gmail'?clientId:''};
   }
-  return {candidates,inspect,normalizeConfig,address,htmlText};
+  return {headerAllowed,candidates,inspect,normalizeConfig,address,htmlText};
 })();

@@ -1,6 +1,6 @@
 # IRCC Response Inspector
 
-> Version 4.3.1: persistent workspace, optional Gmail / Windows 163 assistance, cancellable verification countdown and per-applicant History update dates. See the [setup guide](MAIL-SETUP.en.md).
+> Version 4.3.2: Useful links, automatic 163 helper compatibility checks and update notices, tighter email filtering, export redaction and privacy disclosures. See [installation and authorization](MAIL-SETUP.en.md).
 
 [English](README.en.md) · [简体中文](README.md)
 
@@ -14,8 +14,10 @@ This independent tool is not affiliated with IRCC or the Government of Canada. I
 
 ## Features
 
+- Useful links groups PR Portal, IRCC Portal, New version, GCKey, IRCC / CBSA / CSIS ATIP, status guidance, processing times and the web form. External destinations open in a new tab.
+
 - Store separate application profiles and assist with filling the official form.
-- View each applicant's biometrics, medical exam, eligibility, background check, pending actions and complete History.
+- View each applicant's biometrics, medical exam, eligibility, background check, pending actions and History records retrieved in this check.
 - Preserve History entries and display Security status codes as returned.
 - Compare complete successful checks within the same profile. Failed checks do not replace the baseline.
 - Chinese by default, with English support. The Chinese UI retains official field names such as Surname / Last name and Given name.
@@ -66,7 +68,7 @@ Read the [privacy policy](PRIVACY.md), [security notes](SECURITY.md) and [publis
 
 ## Development and verification
 
-Current version: 4.3.1. No third-party runtime dependencies. Use Node.js 22 or later:
+Current version: 4.3.2. No third-party runtime dependencies. Use Node.js 22 or later:
 
 ~~~sh
 node tests.mjs
@@ -85,3 +87,7 @@ Use [Issues](https://github.com/Will4096/ircc-response-inspector/issues) and inc
 ## License
 
 [MIT License](LICENSE). Copyright (c) 2026 Will4096. Use, modification and redistribution are permitted under the license terms; retain the copyright and license notices.
+
+## Usage limits
+
+Displayed information may be delayed, incomplete or incorrectly parsed. Verify status, document requests, deadlines and decisions in the official IRCC account and formal notices. Latest History record time is not internal case activity time. Security values do not establish screening conclusions. This tool provides no immigration/legal advice or expedited processing and does not limit non-excludable rights. Gmail production eligibility and service terms need separate verification; see [release gates](PUBLISHING.md). Use available private reporting for sensitive issues.

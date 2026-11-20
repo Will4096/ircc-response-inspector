@@ -69,6 +69,13 @@ class HostTests(unittest.TestCase):
             self.assertNotIn('count', events[1])
             self.assertNotIn('secret', json.dumps(events))
 
+    def test_status_never_reads_credentials_or_connects(self):
+        from unittest.mock import Mock
+        secret = Mock(); secret.exists.return_value = True
+        with patch.object(host, 'SECRET', secret), patch.object(host, 'protect', side_effect=AssertionError('must not decrypt')), patch.object(host, 'connect', side_effect=AssertionError('must not log in')):
+            self.assertTrue(host.handle({'action': 'status'})['configured'])
+        secret.read_bytes.assert_not_called()
+
     def test_partial_frame(self):
         self.assertEqual(host.read_exact(io.BytesIO(b'abcd'), 4), b'abcd')
         self.assertIsNone(host.read_exact(io.BytesIO(b'ab'), 4))
@@ -107,9 +114,52 @@ class HostTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
             secret = Path(directory) / 'test.dpapi'
             secret.write_bytes(b'fake')
-            with patch.object(host, 'SECRET', secret):
+            with patch.object(host, 'SECRET', secret), patch.dict(os.environ, {'LOCALAPPDATA': directory}):
                 self.assertTrue(host.handle({'action': 'clear'})['ok'])
             self.assertFalse(secret.exists())
+
+    def test_clear_removes_known_legacy_credential_only(self):
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+            root = Path(directory)
+            old = root / 'IRCCMailHelper' / 'mailbox.dpapi'
+            old.parent.mkdir()
+            old.write_bytes(b'synthetic-old')
+            current = root / 'current.dpapi'
+            current.write_bytes(b'synthetic-new')
+            keep = old.parent / 'unrelated.txt'
+            keep.write_text('keep')
+            with patch.object(host, 'SECRET', current), patch.dict(os.environ, {'LOCALAPPDATA': directory}):
+                host.handle({'action': 'clear'})
+            self.assertFalse(old.exists())
+            self.assertFalse(current.exists())
+            self.assertTrue(keep.exists())
+
+    def test_headers_reject_unrelated_body_reads(self):
+        from unittest.mock import Mock
+        import datetime as dt
+        now = dt.datetime.now(dt.timezone.utc)
+        since = now.timestamp() * 1000 - 2000
+        bodies = []
+        def uid(command, *args):
+            if command == 'search':
+                return ('OK', [b'1 2 3 4'])
+            number, fields = args
+            if fields == '(BODY.PEEK[])':
+                bodies.append(number)
+                return ('OK', [(b'4', b'From: notice@canada.ca\r\nTo: example@163.com\r\nSubject: IRCC Tracker verification code\r\n\r\nYour verification code is 123456.')])
+            subject = 'IRCC newsletter' if number == b'1' else 'IRCC Tracker verification code'
+            recipient = 'other@163.com' if number == b'2' else 'example@163.com'
+            stamp = (now - dt.timedelta(seconds=10) if number == b'3' else now).strftime('%d-%b-%Y %H:%M:%S +0000')
+            header = f'From: notice@canada.ca\r\nTo: {recipient}\r\nSubject: {subject}\r\n'.encode()
+            return ('OK', [(f'1 (INTERNALDATE "{stamp}" RFC822.SIZE 200)'.encode(), header)])
+        client = Mock(); client.uid.side_effect = uid
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as directory:
+            secret = Path(directory) / 'fake.dpapi'; secret.write_bytes(b'opaque')
+            credentials = json.dumps({'email': 'example@163.com', 'password': 'synthetic-secret'}).encode()
+            with patch.object(host, 'SECRET', secret), patch.object(host, 'protect', return_value=credentials), patch.object(host, 'connect', return_value=client), patch.object(host, 'diagnostic'):
+                result = host.handle({'action': 'poll', 'email': 'example@163.com', 'since': since})
+        self.assertEqual(bodies, [b'4'])
+        self.assertEqual(len(result['messages']), 1)
 
     def test_reconnect_checks_login_without_reading_mail(self):
         from unittest.mock import Mock

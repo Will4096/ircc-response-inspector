@@ -15,15 +15,23 @@ var UIModel={
     if(stage==='results')return {...state,step:4,title:data.status==='failed'?'本次查询未完成':data.status==='stopped'?'查询已停止':data.status==='completed'?'查询完成':'可以查询申请进度',help:data.status==='completed'?'先看本次变化，再展开申请人详情。':'可以重新查询；未完成的结果不会更新对比基准。',label:data.status==='completed'?'已完成':'可查询',capture:true};
     return {...state,help:'登录由你在 IRCC 官方页面完成，扩展不会代为登录。',open:true};
   },
+  helper(connection={}){
+    if(connection.error==='mail.version')return {state:'upgrade',action:'升级本机程序',help:'当前版本不兼容。请升级后重新检查，邮箱授权码无需重新填写。'};
+    if(connection.error==='mail.windows')return {state:'unsupported',action:'安装 / 升级本机程序',help:'本机程序仅支持 Windows。',disabled:true};
+    if(connection.helperReady===true)return {state:'ready',action:'安装 / 升级本机程序',help:'本机程序已就绪，取码时按需启动。需要更新或修复时可重新安装。'};
+    if(connection.helperReady===false)return {state:'unavailable',action:connection.helperFailure==='not-found'?'安装本机程序':'安装 / 修复本机程序',help:'尚未连接本机程序。安装或修复后，点击检查确认连接。'};
+    return {state:'unknown',action:'安装 / 升级本机程序',help:'已有安装可先检查；首次使用或需要升级，可直接下载安装。'};
+  },
   mail(config,connection={},draft={}){
-    if(!draft.enabled)return {state:'off',label:'未开启',help:'默认关闭。开启后先完成连接，才会读取匹配的验证邮件。'};
+    if(!draft.enabled)return {state:'off',label:'未开启',help:'默认关闭。连接后先筛选邮件头，再读取候选正文；手动输入始终可用。'};
+    if(draft.provider==='163'&&connection.error==='mail.version')return {state:'error',label:'需要升级',help:'本机程序版本不兼容，请点击“升级本机程序”。'};
     if(draft.provider==='163'&&connection.helperReady===false)return {state:'error',label:'本机程序未连接',help:'检查 Windows 本机程序，或继续手动输入验证码。'};
     if(draft.hasPassword || !config.enabled || draft.email!==config.email || draft.provider!==config.provider || draft.clientId!==config.clientId)return {state:'setup',label:'待配置',help:'完成连接后生效，当前仍可手动输入验证码。'};
     if(connection.error==='mail.auth')return {state:'reauth',label:'需要重新授权',help:'Gmail 授权暂不可用，请重新连接；手动输入不受影响。'};
     if(connection.error)return {state:'error',label:'连接需要检查',help:'上次连接失败，请重新验证，或手动输入验证码。'};
-    if(config.provider==='gmail')return connection.authReady?{state:'connected',label:'已连接',help:'只在本次查询等待验证码时检查邮件，确认后才提交。'}:{state:'reauth',label:'需要重新授权',help:'Gmail 授权暂不可用，请重新连接；手动输入不受影响。'};
+    if(config.provider==='gmail')return connection.authReady?{state:'connected',label:'已连接',help:'仅等待验证码时检查候选邮件。自动验证单独开启，倒计时期间可暂停。'}:{state:'reauth',label:'需要重新授权',help:'Gmail 授权暂不可用，请重新连接；手动输入不受影响。'};
     if(connection.helperReady===false)return {state:'error',label:'本机程序未连接',help:'检查 Windows 本机程序，或继续手动输入验证码。'};
     if(!connection.configured || !connection.verifiedAt)return {state:'setup',label:'待验证连接',help:'填写客户端授权码并验证连接后启用。'};
-    return {state:'connected',label:'已连接',help:'只在本次查询等待验证码时检查邮件，确认后才提交。'};
+    return {state:'connected',label:'已连接',help:'仅等待验证码时检查候选邮件。自动验证单独开启，倒计时期间可暂停。'};
   }
 };

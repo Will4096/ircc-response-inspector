@@ -26,6 +26,8 @@ $previousSecret = Join-Path (Join-Path $env:LOCALAPPDATA 'IRCCMailHelper') 'mail
 $currentSecret = Join-Path $helperHome 'mailbox.dpapi'
 if (!(Test-Path -LiteralPath $currentSecret) -and (Test-Path -LiteralPath $previousSecret)) {
     Copy-Item -LiteralPath $previousSecret -Destination $currentSecret
+    if ((Get-FileHash -LiteralPath $previousSecret -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $currentSecret -Algorithm SHA256).Hash) { throw 'Credential migration verification failed.' }
+    Remove-Item -LiteralPath $previousSecret
 }
 $hostScript = Join-Path $helperHome 'mail_host.py'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'mail_host.py') -Destination $hostScript -Force

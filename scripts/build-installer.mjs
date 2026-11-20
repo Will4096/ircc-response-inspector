@@ -4,7 +4,7 @@ import {createHash} from 'node:crypto';
 const root=new URL('../',import.meta.url);
 let entries=[];
 for(const name of ['install.ps1','mail_host.py','uninstall.ps1']){
-  const bytes=await fs.readFile(new URL('windows/'+name,root));
+  const bytes=Buffer.from((await fs.readFile(new URL('windows/'+name,root),'utf8')).replace(/\r\n/g,'\n'));
   entries.push(`    '${name}' = @{ Hash = '${createHash('sha256').update(bytes).digest('hex')}'; Data = '${bytes.toString('base64')}' }`);
 }
 const script=`param(
@@ -47,3 +47,7 @@ try {
 `;
 await fs.writeFile(new URL('windows/install-one-click.ps1',root),script);
 console.log('Built standalone installer from three local source files.');
+
+// Pin the bundled installer, including on Windows checkouts.
+const ui=new URL('installer-ui.js',root),text=await fs.readFile(ui,'utf8');
+await fs.writeFile(ui,text.replace(/const hash='[^']+'/,"const hash='"+createHash('sha256').update(script).digest('hex')+"'"));

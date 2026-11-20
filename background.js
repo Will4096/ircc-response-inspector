@@ -610,7 +610,7 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
   if (!state?.active) return;
   if(method==='Network.requestWillBeSent'){
     state.requestScopes.set(params.requestId,requestRelation(params.request));
-    try{const page=new URL(params.documentURL || '');state.pageScopes.set(params.requestId,page.origin===new URL(params.request.url).origin?page.pathname+page.search:'');}catch{}
+    try{const page=new URL(params.documentURL || '');state.pageScopes.set(params.requestId,page.origin===new URL(params.request.url).origin?page.pathname:'');}catch{}
   }
   if (method === 'Network.responseReceived') {
     const r = params.response;
