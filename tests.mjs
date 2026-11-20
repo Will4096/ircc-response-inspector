@@ -30,11 +30,11 @@ const legacy={schemaVersion:2,active:true,status:'failed',reason:'读取超时',
 const recovered=domain.analyzeStoredCapture(legacy);assert.equal(recovered.status,'completed');assert.equal(recovered.active,false);assert.equal(recovered.applicants[2].history[0].key,'Security');assert.equal(recovered.analysis.total,68);
 async function harness(saved){
   let handler,network;let url='https://ircc-services.canada.ca/2/ast-details';let detached=0;let reloads=0;const moves=[];const timers=[];const stored=saved?{'capture:7':saved}:{};const bodies=new Map();
-  const context={crypto:webcrypto,URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,getManifest:()=>manifest,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
+  const context={crypto:webcrypto,URL,Date,TextDecoder,Uint8Array,atob,importScripts(){},setTimeout:(fn,delay)=>{const timer={fn,delay};timers.push(timer);return timer;},clearTimeout:timer=>{if(timer)timer.cancelled=true;},chrome:{runtime:{getURL:path=>'chrome-extension://test/'+path,getManifest:()=>manifest,onMessage:{addListener:fn=>handler=fn}},storage:{onChanged:{addListener(){}},local:{get:async()=>({applications:[{id:'profile',role:'principalApplicantId'}]})},session:{set:async values=>Object.assign(stored,values),get:async key=>({[key]:stored[key]}),remove:async key=>delete stored[key]}},action:{setBadgeText:async()=>{},setBadgeBackgroundColor:async()=>{}},tabs:{get:async()=>({url}),update:async(id,change)=>{if(change.url){url=change.url;moves.push(change.url);}},reload:async()=>reloads++,sendMessage:async()=>{},onRemoved:{addListener(){}},onUpdated:{addListener(){}}},debugger:{attach:async()=>{},detach:async()=>detached++,sendCommand:async(source,method,args)=>method==='Network.getResponseBody'?{body:typeof bodies.get(args.requestId)==='string'?bodies.get(args.requestId):JSON.stringify(bodies.get(args.requestId))}:{},onEvent:{addListener:fn=>network=fn},onDetach:{addListener(){}}}}};
   vm.createContext(context);for(const name of ['domain.js','form.js','model.js','profiles.js','scanner.js','comparison.js','privacy-data.js','backup-core.js','mail-core.js','mail-assist.js','background.js'])vm.runInContext(await read(name),context);
-  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r'){
-    bodies.set(key,json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:'https://ircc-services.canada.ca/api'}});
-    await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:'https://ircc-services.canada.ca/api',status:200,mimeType:'application/json'}});
+  return {context,timers,moves,get detached(){return detached;},get reloads(){return reloads;},get url(){return url;},set url(value){url=value;},async sendExtension(message,sender={}){return new Promise(resolve=>handler(message,sender,resolve));},async send(action,data={}){return new Promise(resolve=>handler({action,...data},{tab:{id:7},url},resolve));},async respond(json,key='r',responseUrl='https://ircc-services.canada.ca/api',rawText){
+    bodies.set(key,rawText??json);await network({tabId:7},'Network.requestWillBeSent',{requestId:key,documentURL:url,request:{url:responseUrl}});
+    await network({tabId:7},'Network.responseReceived',{requestId:key,type:'Fetch',response:{url:responseUrl,status:200,mimeType:'application/json'}});
     await network({tabId:7},'Network.loadingFinished',{requestId:key});
   },async hang(){await network({tabId:7},'Network.responseReceived',{requestId:'forever',type:'Fetch',response:{url:'https://ircc-services.canada.ca/irrelevant',status:200,mimeType:'application/json'}});}};
 }
@@ -168,6 +168,30 @@ async function harness(saved){
   a=await autoHarness();await a.send('armSearchSubmit');await a.h.send('mailTrackRequest',{applicationNumber:'DEMO0001'});a.advance(5000);await a.send('commitSearchSubmit');assert.equal(a.clicks(),0,'Manual Submit cancels the queued automatic click');
   a=await autoHarness(true);assert.equal(a.pending,undefined);assert.equal(a.clicks(),0,'Incomplete dropdowns do not start auto-submit');
   console.log('PASS: five-second minimum, visible-view ownership, cancellation, profile/page changes, manual submission and duplicate suppression.');
+}
+// Capture fidelity: no field-name filtering, URL stripping or encoded-string rewriting.
+{
+  const h=await harness();await h.send('start');
+  h.url='https://ircc-services.canada.ca/2/ast-details?relation_id=1#details';
+  const original={securityCode:'17',reqId:'synthetic-request',session:'synthetic-business-session',token:'synthetic-value',url:'/business?filter=active#history',encoded:' { "securityCode": "18", "amount": 1.00 } '};
+  const originalText=JSON.stringify(original,null,2)+'\n';
+  await h.respond(original,'fidelity','https://ircc-services.canada.ca/api?filter=active#result',originalText);
+  const record=(await h.send('read')).responses[0];
+  assert.equal(JSON.stringify(record.json),JSON.stringify(original));assert.equal(record.raw,originalText);
+  assert.equal(record.url,'https://ircc-services.canada.ca/api?filter=active#result');assert.equal(record.page,h.url);
+  console.log('PASS: captured business fields, full URLs and embedded JSON strings remain unchanged with original response text.');
+}
+// Capture loss is recorded even when business-status analysis can still complete.
+{
+ const h=await harness();await h.send('start');
+ for(let index=0;index<101;index++)await h.respond({configuration:true,index},'limit-'+index);
+ let saved=await h.send('read');assert.equal(saved.responses.length,100);assert.equal(saved.rawCapture.evicted,1);assert.equal(saved.rawCapture.captured,101);
+ await h.respond({},'invalid','https://ircc-services.canada.ca/api','not-json');
+ await h.respond({},'large','https://ircc-services.canada.ca/api',' '.repeat(5000001));
+ const send=h.context.chrome.debugger.sendCommand;h.context.chrome.debugger.sendCommand=async(source,method,args)=>{if(method==='Network.getResponseBody')throw Error('synthetic read failure');return send(source,method,args);};
+ await h.respond({},'read-failure');saved=await h.send('read');
+ assert.equal(saved.rawCapture.invalidJson,1);assert.equal(saved.rawCapture.oversized,1);assert.equal(saved.rawCapture.readFailed,1);
+ console.log('PASS: eviction, oversized responses, invalid JSON and response-read failures remain visible in capture snapshots.');
 }
 // All four records in one response: no detail/history traversal, no waiting for an unrelated request.
 let app=await harness();assert.equal((await app.send('start')).ok,true);assert.equal(app.reloads,1);await app.hang();await app.respond(wrapped);await app.send('overview',{application:{number:'TEST'},applicants:roster});

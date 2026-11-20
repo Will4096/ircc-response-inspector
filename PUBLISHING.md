@@ -34,3 +34,7 @@ A reviewed vX.Y.Z tag must match manifest.json and release-notes/vX.Y.Z.md. The 
 ## License
 
 Keep the complete MIT LICENSE and notices in source and runtime distributions. Review rights to external marks, screenshots and dependencies separately.
+
+## Separate publication review from user data
+
+Inspect public source, examples and media for personal data, credentials and machine-specific paths. The runtime build rejects local home paths, development endpoints, credential signatures and development/private artifact paths. Keep user captures, exports, browser profiles, local configuration and private history out of Git and releases; never collect them for release checks. This publication check must not redact or rewrite the extension’s captured business responses or local raw exports. Raw plain/encrypted exports preserve captured data.

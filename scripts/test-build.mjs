@@ -20,3 +20,18 @@ assert.ok(original.equals(await fs.readFile(path.join(temp,'dist',filename))),'L
 const corrupted=Buffer.from(original);corrupted[corrupted.length-1]^=1;await fs.writeFile(path.join(temp,'tampered.zip'),corrupted);
 assert.throws(()=>run(path.join(temp,'scripts/build-release.mjs'),['--verify','--archive=tampered.zip']));
 console.log('PASS: LF/CRLF checkouts produce identical runtime archives; source verification rejects a changed archive.');
+// Inject synthetic contamination into the disposable checkout only, never user files.
+const candidate=path.join(temp,'layout.js'),clean=await fs.readFile(candidate,'utf8');
+for(const contamination of ['C:'+String.raw`\Users\SyntheticDeveloper\project`,'http://localhost:4567/mock','github_pat_'+'x'.repeat(30)]){
+ await fs.writeFile(candidate,clean+'\n// '+contamination+'\n');
+ assert.throws(()=>run(path.join(temp,'scripts/build-release.mjs'),['--runtime-only']),/Personal path, development endpoint or secret/);
+}
+await fs.writeFile(candidate,clean);
+for(const name of files)assert.ok(!/(?:tests?|fixtures?|audits?|exports?|captures?|screenshots?|node_modules|\.git)(?:\/|$)/i.test(name));
+console.log('PASS: runtime packaging rejects synthetic personal paths, development endpoints and secret signatures; no local data is read.');
+
+const manifestPath=path.join(temp,'manifest.json'),manifestText=await fs.readFile(manifestPath,'utf8');
+await fs.writeFile(manifestPath,JSON.stringify({...JSON.parse(manifestText),version_name:'0.0.0'}));
+assert.throws(()=>run(path.join(temp,'scripts/build-release.mjs'),['--runtime-only']),/Manifest display version differs/);
+await fs.writeFile(manifestPath,manifestText);
+console.log('PASS: runtime packaging rejects a stale manifest display version.');

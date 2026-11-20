@@ -16,6 +16,9 @@ captures/
 screenshots/
 qa-preview/
 ircc-*.json
+*.irccraw
+*.irccprofiles
+*.irccbackup
 *.log
 dist/
 public-upload/
