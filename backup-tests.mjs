@@ -12,7 +12,7 @@ assert.notEqual(await c.Backup.encrypt(data,'synthetic-password-2026'),encoded,'
 for(const text of ['Example','DEMO0001','SECRET','MAILSECRET','OTPSECRET','123456'])assert.ok(!encoded.includes(text));
 const restored=await c.Backup.decrypt(encoded,'synthetic-password-2026');
 assert.equal(restored.captures['demo-a'].applicants[0].history[0].actStatus,'17');assert.equal(restored.captures['demo-a'].active,false);assert.equal(restored.applications[0].password,undefined);assert.equal(restored.mailAssist,undefined);
-assert.equal(restored.captures['demo-a'].responses[0].otp,'[REDACTED]');
+assert.equal(restored.captures['demo-a'].responses[0].otp,'OTPSECRET');
 await assert.rejects(()=>c.Backup.decrypt(encoded,'wrong-password'),/backup.decrypt/);
 const modified=JSON.parse(encoded);modified.data=(modified.data[0]==='A'?'B':'A')+modified.data.slice(1);await assert.rejects(()=>c.Backup.decrypt(JSON.stringify(modified),'synthetic-password-2026'),/backup.decrypt/);
 await assert.rejects(()=>c.Backup.encrypt(data,'short'),/backup.password/);
@@ -39,7 +39,7 @@ const query={...session['capture:profile:demo-a'],startedAt:'2026-11-16T10:00:00
 const stores={'capture:profile:demo-a':query,'capture:8':{...query,profileId:'demo-b',application:{number:'DEMO0002'},startedAt:'2026-11-16T12:00:00Z'}};
 const raw=transfer.latestRaw(local,stores,'demo-a');
 assert.equal(raw.responses.length,1);assert.equal(raw.applications,undefined);assert.equal(raw.mailAssist,undefined);
-assert.ok(!JSON.stringify(raw).includes('OTPSECRET'));assert.ok(!JSON.stringify(raw).includes('URLSECRET'));
+assert.equal(JSON.stringify(raw.responses),JSON.stringify(query.responses));
 assert.equal(JSON.parse(raw.responses[0].json.actions[0].returnValue).history[0].actStatus,'17');
 const original=JSON.stringify(stores);transfer.latestRaw(local,stores,'demo-a');assert.equal(JSON.stringify(stores),original);
 stores['capture:9']={...query,startedAt:'2026-11-16T11:00:00Z',responses:[],active:true};
@@ -51,7 +51,7 @@ assert.equal(JSON.parse(rawFile).format,'ircc-encrypted-query');assert.equal((aw
 await assert.rejects(()=>transfer.decryptProfiles(rawFile,'synthetic-password-2026'),/backup.format/);
 await assert.rejects(()=>transfer.decryptRaw(profileFile,'synthetic-password-2026'),/backup.format/);
 await assert.rejects(()=>transfer.decryptRaw(rawFile,'wrong-password'),/backup.decrypt/);
-console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge isolation, latest raw response export, partial/empty queries, redaction and distinct authenticated raw encryption.');
+console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge isolation, latest raw response export, partial/empty queries, exact response preservation and distinct authenticated raw encryption.');
 
 // Both settings and the applicant header use the same export and stale-context checks.
 {
@@ -60,7 +60,7 @@ console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge 
   c.URL=class extends URL{static createObjectURL(value){blob=value;return 'blob:synthetic';}static revokeObjectURL(){}};
   c.chrome={storage:{local:{get:async()=>local},session:{get:async()=>rawStore}}};
   vm.runInContext(await fs.readFile(new URL('raw-export.js',import.meta.url),'utf8'),c);
-  await c.RawExport.write('demo-a');assert.equal(downloads,1);assert.ok(filename.endsWith('.json'));assert.equal(JSON.parse(await blob.text()).responses[0].json.otp,'[REDACTED]');
+  await c.RawExport.write('demo-a');assert.equal(downloads,1);assert.ok(filename.endsWith('.json'));assert.equal(JSON.parse(await blob.text()).responses[0].json.otp,'OTPSECRET');
   await assert.rejects(()=>c.RawExport.write('demo-a',{accept:()=>false}),/export.cancelled/);assert.equal(downloads,1);
   await c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'});assert.equal(downloads,2);assert.ok(filename.endsWith('.irccraw'));
   const encrypt=transfer.encryptRaw;let allowed=true;
@@ -68,13 +68,44 @@ console.log('PASS: profile-only encrypted transfer, legacy compatibility, merge 
   await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password',accept:()=>allowed}),/export.cancelled/);assert.equal(downloads,2);
   transfer.encryptRaw=async(...args)=>{const text=await encrypt.apply(transfer,args);rawStore['capture:profile:demo-a']={...query,startedAt:'2026-11-17T10:00:00Z'};return text;};
   await assert.rejects(()=>c.RawExport.write('demo-a',{encrypted:true,password:'synthetic-password',repeat:'synthetic-password'}),/export.changed/);assert.equal(downloads,2);transfer.encryptRaw=encrypt;
+  rawStore['capture:profile:demo-a']={...query,responses:[{raw:'x'.repeat(30*1024*1024),json:{configuration:true}}]};
+  await assert.rejects(()=>c.RawExport.write('demo-a'),/backup.size/);assert.equal(downloads,2);assert.equal(rawStore['capture:profile:demo-a'].responses[0].raw.length,30*1024*1024);
+  console.log('PASS: oversized export stops without a download or truncating captured data.');
   console.log('PASS: shared raw export service, plain/encrypted output and no file after cancellation or query changes during encryption.');
 }
 
-// Both export formats must scrub historic captures, not only new captures.
+// Both formats preserve historic response content without rewriting.
 const auditStore={'capture:profile:demo-a':{profileId:'demo-a',profileVerified:true,application:{number:'DEMO0001'},startedAt:'2026-11-17T12:00:00Z',responses:[{url:'https://ircc-services.canada.ca/api?token=SYNTHETIC-TOP',page:'/2/ast-details?session=SYNTHETIC-PAGE',json:{next:'https://example.invalid/next?reqId=SYNTHETIC-NESTED',history:[{key:'Security',actStatus:'17'}]}}]}};
 const safeRaw=transfer.latestRaw(local,auditStore,'demo-a');
-assert.ok(!JSON.stringify(safeRaw).includes('SYNTHETIC-'));
+assert.equal(JSON.stringify(safeRaw.responses),JSON.stringify(auditStore['capture:profile:demo-a'].responses));
 const roundtrip=await transfer.decryptRaw(await transfer.encryptRaw(safeRaw,'synthetic-password-2026'),'synthetic-password-2026');
-assert.ok(!JSON.stringify(roundtrip).includes('SYNTHETIC-'));assert.equal(roundtrip.responses[0].json.history[0].actStatus,'17');
-console.log('PASS: historic raw captures scrub nested/page URL parameters in plain and encrypted exports.');
+assert.equal(JSON.stringify(roundtrip),JSON.stringify(safeRaw));assert.equal(roundtrip.responses[0].json.history[0].actStatus,'17');
+console.log('PASS: historic raw captures retain nested/page URL parameters in plain and encrypted exports.');
+
+// Preserve raw text byte-for-byte (including JSON whitespace/numeric spelling), nested strings and all field names.
+{
+ const originalText=' { "securityCode": "17", "value": 1.00, "large": 9007199254740993 }\n';
+ const record={url:'https://example.invalid/api?reqId=synthetic#part',page:'/page?view=all#part',raw:originalText,json:{securityCode:'17',reqId:'synthetic',session:'business',password:'synthetic-response-value',encoded:' { "token": "synthetic", "value": 1.00 } ',deep:{url:'/next?a=1#section'}}};
+ const store={'capture:profile:demo-a':{...query,responses:[record]}};
+ const plain=transfer.latestRaw(local,store,'demo-a');assert.equal(JSON.stringify(plain.responses[0]),JSON.stringify(record));
+ const decoded=await transfer.decryptRaw(await transfer.encryptRaw(plain,'synthetic-password-2026'),'synthetic-password-2026');
+ assert.equal(JSON.stringify(decoded),JSON.stringify(plain));assert.equal(decoded.responses[0].raw,originalText);
+ console.log('PASS: raw text, numeric spelling, embedded JSON, business fields and URLs survive plain/encrypted export unchanged.');
+}
+
+// Completeness describes capture limitations without touching any response content.
+{
+ const record={raw:' { "securityCode": "17" } ',json:{securityCode:'17'}};
+ const counters={version:1,captured:1,oversized:0,invalidJson:0,readFailed:0,requestFailed:0,evicted:0,interrupted:0};
+ const current={...query,active:false,status:'completed',rawCapture:counters,responses:[record]};
+ const exportCurrent=()=>transfer.latestRaw(local,{'capture:profile:demo-a':current},'demo-a');
+ assert.equal(exportCurrent().integrity.state,'captured');
+ for(const key of ['oversized','invalidJson','readFailed','requestFailed','evicted','interrupted']){
+   counters[key]=1;const data=exportCurrent();assert.equal(data.integrity.state,'partial');assert.equal(data.integrity.counters[key],1);assert.equal(JSON.stringify(data.responses[0]),JSON.stringify(record));counters[key]=0;
+ }
+ current.active=true;assert.equal(exportCurrent().integrity.state,'partial');current.active=false;
+ current.status='failed';assert.equal(exportCurrent().integrity.state,'partial');current.status='completed';
+ delete current.rawCapture;assert.equal(exportCurrent().integrity.state,'unknown');current.rawCapture=counters;
+ delete record.raw;assert.equal(exportCurrent().integrity.missingOriginalText,1);assert.equal(exportCurrent().integrity.state,'unknown');
+ console.log('PASS: ongoing, failed, skipped, evicted and legacy captures disclose completeness without rewriting responses.');
+}

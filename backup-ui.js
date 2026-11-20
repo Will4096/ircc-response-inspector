@@ -21,7 +21,7 @@
     const encrypted=$('rawEncrypted').checked;$('rawPasswordArea').hidden=!encrypted||!rawAvailable;
     $('rawAction').textContent=t(rawBusy?'处理中…':encrypted?'导出加密原始数据':'导出原始 JSON');
     for(const id of ['rawProfile','rawEncrypted','rawPassword','rawRepeat','rawAction','rawDecryptAction','rawDecryptFile','rawDecryptPassword'])$(id).disabled=rawBusy;
-    $('rawAction').disabled=rawBusy||!rawAvailable;$('rawInfo').textContent=t(infoSource)+(infoDetails?' '+t('响应数量：')+infoDetails.count+(infoDetails.at?' · '+t('查询时间：')+I18n.date(infoDetails.at):''):'');$('rawStatus').textContent=t(rawSource);$('rawStatus').dataset.tone=rawTone;
+    $('rawAction').disabled=rawBusy||!rawAvailable;$('rawInfo').textContent=(infoDetails?.data?RawExport.describe(infoDetails.data):t(infoSource))+(infoDetails?' '+t('响应数量：')+infoDetails.count+(infoDetails.at?' · '+t('查询时间：')+I18n.date(infoDetails.at):''):'');$('rawStatus').textContent=t(rawSource);$('rawStatus').dataset.tone=rawTone;
   }
   async function refresh(){
     const revision=++refreshId,previous=$('rawProfile').value;
@@ -33,7 +33,7 @@
   }
   async function refreshRaw(){
     const profileId=$('rawProfile').value;
-    try{const [local,session]=await Promise.all([chrome.storage.local.get('applications'),chrome.storage.session.get(null)]);if(profileId!==$('rawProfile').value)return;const data=DataTransferCore.latestRaw(local,session,profileId);rawAvailable=true;infoDetails={count:data.responses.length,at:data.query.startedAt||data.responses[0]?.capturedAt};infoSource=data.query.active?'查询正在进行，将导出点击时已捕获的响应。':data.query.status==='completed'?'已找到最新查询的原始响应。':'最新查询未完成，仅导出已捕获的原始响应。';}
+    try{const [local,session]=await Promise.all([chrome.storage.local.get('applications'),chrome.storage.session.get(null)]);if(profileId!==$('rawProfile').value)return;const data=DataTransferCore.latestRaw(local,session,profileId);rawAvailable=true;infoDetails={count:data.responses.length,at:data.query.startedAt||data.responses[0]?.capturedAt};infoSource='';infoDetails.data=data;}
     catch(error){rawAvailable=false;infoDetails=null;infoSource=errors[error.message]||'原始数据读取失败，请重试。';}renderRaw();
   }
   function reset(){pending=null;source='';render();}

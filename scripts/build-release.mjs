@@ -5,8 +5,16 @@ import {createHash} from 'node:crypto';
 import {deflateRawSync} from 'node:zlib';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const manifest=JSON.parse(await fs.readFile(path.join(root,'manifest.json'),'utf8'));
+if(manifest.version_name&&!manifest.version_name.includes('preview')&&manifest.version_name!==manifest.version)throw Error('Manifest display version differs from runtime version');
 const files=['windows/install-one-click.ps1','LICENSE','manifest.json','layout.js','navigation.js','workspace.html','workspace.js','links.html','links.js','helper-health.js','app.css','ui-model.js','autofill.js','background.js','comparison.js','domain.js','form.js','i18n.js','model.js','options.html','options.js','options.css','settings.html','settings.js','installer-command.js','installer-ui.js','backup-core.js','backup-ui.js','raw-export.js','mail-help.html','mail-help.en.html','popup.css','popup.html','popup.js','mail-core.js','mail-assist.js','mail-content.js','mail-options.js','mail-popup.js','MAIL-SETUP.md','MAIL-SETUP.en.md','privacy-data.js','privacy.html','privacy.css','profiles.js','scanner.js',
   '_locales/zh_CN/messages.json','_locales/en/messages.json',...['16','24','32','48','128'].map(size=>'icons/icon-'+size+'.png')];
+// This checks shipped code/assets only. Never run publication cleanup on user data.
+for(const file of files){
+  if(file.split('/').some(part=>/^(?:tests?|fixtures?|audits?|exports?|captures?|screenshots?|dist|node_modules|\.git|\.env(?:\..*)?)$/i.test(part)))throw Error('Development/private artifact in runtime: '+file);
+  if(!/\.(?:js|json|html|css|md|ps1)$/.test(file))continue;
+  const text=await fs.readFile(path.join(root,file),'utf8');
+  if(/(?:[A-Z]:[\\/]Users[\\/]|["']\/(?:Users|home)\/)[^\s]+|https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?=[:/\s]|$)|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{25,}/i.test(text))throw Error('Personal path, development endpoint or secret in runtime: '+file);
+}
 function crc32(bytes){let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;}
 const chunks=[],directory=[];let offset=0;
 for(const file of files){

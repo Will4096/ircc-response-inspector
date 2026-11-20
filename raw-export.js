@@ -5,7 +5,14 @@ var RawExport=(()=>{
   const errorText=error=>t(errors[error?.message]||'原始数据导出失败，请重试。');
   function save(text,name){const url=URL.createObjectURL(new Blob([text],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}
   async function read(profileId){const [local,session]=await Promise.all([chrome.storage.local.get('applications'),chrome.storage.session.get(null)]);const data=DataTransferCore.latestRaw(local,session,profileId);return {data,label:local.applications.find(p=>p.id===profileId).label};}
-  const queryKey=data=>JSON.stringify([data.profileId,data.query.startedAt,data.query.finishedAt||null,data.query.active]);
+  const queryKey=data=>JSON.stringify([data.profileId,data.query.startedAt,data.query.finishedAt||null,data.query.active,data.responses.length,data.responses.at(-1)?.capturedAt||null,data.integrity]);
+  function describe(data){
+    const integrity=data.integrity,c=integrity?.counters;
+    const parts=[t(data.query.active?'查询正在进行，仅导出当前已采集的响应。':data.query.status!=='completed'?'查询未完成，仅导出已采集的部分响应。':integrity?.state==='partial'?'查询已完成，但响应采集存在缺失。':integrity?.state==='unknown'?'旧记录的采集完整性无法核实。':'查询已完成，导出本次已采集的响应。')];
+    for(const [key,label] of [['oversized','超出单响应限制：'],['invalidJson','非有效 JSON：'],['readFailed','读取失败：'],['requestFailed','请求失败：'],['evicted','超出保留数量：'],['interrupted','停止时未完成：']])if(c?.[key])parts.push(t(label)+c[key]);
+    if(integrity?.missingOriginalText)parts.push(t('缺少原始响应文本：')+integrity.missingOriginalText);
+    return parts.join(' · ');
+  }
   async function write(profileId,{encrypted=false,password='',repeat='',expected,accept=()=>true}={}){
     if(!accept())throw Error('export.cancelled');
     const {data}=await read(profileId);if(expected&&queryKey(data)!==expected)throw Error('export.changed');
@@ -28,13 +35,13 @@ var RawExport=(()=>{
   function node(tag,text,attrs={}){const item=document.createElement(tag);if(text)item.textContent=text;for(const [key,value] of Object.entries(attrs))item.setAttribute(key,value);return item;}
   function build(){
     dialog=node('dialog',null,{id:'rawExportDialog',class:'raw-export-dialog','aria-labelledby':'rawExportTitle'});
-    const form=node('form',null,{novalidate:''}),title=node('h2',null,{id:'rawExportTitle'}),target=node('p',null,{class:'help'}),meta=node('p',null,{class:'help'}),formatLabel=node('label'),formatText=node('span'),format=node('select',null,{id:'resultRawFormat'});
+    const form=node('form',null,{novalidate:''}),title=node('h2',null,{id:'rawExportTitle'}),target=node('p',null,{class:'help'}),meta=node('p',null,{class:'help'}),integrity=node('p',null,{class:'notice',role:'status'}),formatLabel=node('label'),formatText=node('span'),format=node('select',null,{id:'resultRawFormat'});
     format.append(node('option','JSON',{value:'plain'}),node('option','Encrypted',{value:'encrypted'}));formatLabel.append(formatText,format);
     const passwords=node('div',null,{class:'field-grid'});
     for(const key of ['password','repeat']){const label=node('label'),text=node('span'),input=node('input',null,{type:'password',autocomplete:'new-password',maxlength:'1024',id:'resultRaw'+key});label.append(text,input);passwords.append(label);fields[key]=input;fields[key+'Text']=text;}
     const help=node('p',null,{class:'help'}),warning=node('p',null,{class:'help'}),status=node('p',null,{class:'notice',role:'status'}),actions=node('div',null,{class:'action-row'}),submit=node('button',null,{type:'submit',class:'primary'}),cancel=node('button',null,{type:'button'});
-    actions.append(submit,cancel);form.append(title,target,meta,formatLabel,passwords,help,warning,status,actions);dialog.append(form);document.body.append(dialog);
-    Object.assign(fields,{form,title,target,meta,formatText,format,passwords,help,warning,status,submit,cancel});
+    actions.append(submit,cancel);form.append(title,target,meta,integrity,formatLabel,passwords,help,warning,status,actions);dialog.append(form);document.body.append(dialog);
+    Object.assign(fields,{form,title,target,meta,integrity,formatText,format,passwords,help,warning,status,submit,cancel});
     format.onchange=()=>{if(format.value==='plain'){fields.password.value='';fields.repeat.value='';}dialogSource='';paint();};cancel.onclick=()=>close();
     dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.addEventListener('close',()=>{if(current&&!dialog.open)close();});
     form.onsubmit=async event=>{
@@ -48,17 +55,18 @@ var RawExport=(()=>{
   function paint(){
     if(!current||!dialog)return;const encrypted=fields.format.value==='encrypted';
     fields.title.textContent=t('导出原始查询数据');fields.target.textContent=t('目标申请：')+current.label;
-    fields.meta.textContent=t('响应数量：')+current.count+' · '+t(current.active?'查询正在进行，将导出点击时已捕获的响应。':current.status==='completed'?'已找到最新查询的原始响应。':'最新查询未完成，仅导出已捕获的原始响应。');
+    fields.meta.textContent=t('响应数量：')+current.count+(current.data.query.startedAt?' · '+t('查询时间：')+I18n.date(current.data.query.startedAt):'');
+    fields.integrity.textContent=describe(current.data);fields.integrity.dataset.tone=current.data.integrity?.state==='captured'?'info':'warning';
     fields.formatText.textContent=t('文件格式');fields.format.options[0].textContent=t('原始 JSON（不加密）');fields.format.options[1].textContent=t('密码加密文件');
     fields.passwordText.textContent=t('文件密码');fields.repeatText.textContent=t('再次输入密码');fields.passwords.hidden=!encrypted;fields.help.hidden=!encrypted;fields.help.textContent=t('导出时至少 10 个字符；密码不会保存。');
-    fields.warning.textContent=t('原始响应仍可能包含姓名和申请编号。取消加密会生成明文 JSON，分享前请自行脱敏。已知认证字段会遮盖，Security 原始状态保留。');
+    fields.warning.textContent=t('按采集内容导出原始响应，不做脱敏或字段替换。可选择密码加密或明文 JSON；内容可能包含个人及认证信息，请妥善保管。')+' '+t('导出范围为本次已采集的响应，不代表官网全部数据。raw 字段保留原始响应文本，json 字段用于结构化查看。');
     fields.status.textContent=t(dialogSource);fields.submit.textContent=t(busy?'处理中…':encrypted?'导出加密原始数据':'导出原始 JSON');fields.cancel.textContent=t('取消');
     for(const item of [fields.format,fields.password,fields.repeat,fields.submit])item.disabled=busy;
   }
-  async function open(profileId,encrypted){
+  async function open(profileId,encrypted=true){
     const run=++generation;notice('');if(menu)menu.open=false;
     try{const {data,label}=await read(profileId);if(generation!==run||document.getElementById('application')?.value!==profileId)return;
-      if(!dialog)build();current={profileId,label,count:data.responses.length,active:data.query.active,status:data.query.status,key:queryKey(data)};busy=false;dialogSource='';fields.password.value='';fields.repeat.value='';fields.format.value=encrypted?'encrypted':'plain';paint();dialog.showModal();fields.format.focus();
+      if(!dialog)build();current={data,profileId,label,count:data.responses.length,active:data.query.active,status:data.query.status,key:queryKey(data)};busy=false;dialogSource='';fields.password.value='';fields.repeat.value='';fields.format.value=encrypted?'encrypted':'plain';paint();dialog.showModal();fields.format.focus();
     }catch(error){if(generation===run)notice(errors[error.message]||'原始数据导出失败，请重试。');}
   }
   if(menu){
@@ -71,5 +79,5 @@ var RawExport=(()=>{
     document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')close();});
     I18n.onChange(()=>{notice(noticeSource);paint();});
   }
-  return {read,write,save,errorText,open,close};
+  return {read,write,save,errorText,open,close,describe};
 })();

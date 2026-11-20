@@ -1,6 +1,6 @@
 # IRCC Response Inspector
 
-> Version 4.3.2: Useful links, automatic 163 helper compatibility checks and update notices, tighter email filtering, export redaction and privacy disclosures. See [installation and authorization](MAIL-SETUP.en.md).
+> Version 4.3.3: Raw exports preserve captured content with optional encryption and explicit capture-loss and completeness information. See [installation and authorization](MAIL-SETUP.en.md).
 
 [English](README.en.md) · [简体中文](README.md)
 
@@ -68,7 +68,7 @@ Read the [privacy policy](PRIVACY.md), [security notes](SECURITY.md) and [publis
 
 ## Development and verification
 
-Current version: 4.3.2. No third-party runtime dependencies. Use Node.js 22 or later:
+Current version: 4.3.3. No third-party runtime dependencies. Use Node.js 22 or later:
 
 ~~~sh
 node tests.mjs

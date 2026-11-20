@@ -90,7 +90,7 @@ function configureQueryPanel(){
 configureQueryPanel();
 chrome.runtime.onInstalled?.addListener(configureQueryPanel);
 chrome.runtime.onStartup?.addListener(configureQueryPanel);
-// Remove the mailbox listener and metadata left by 3.1.0–3.1.2 on upgrade.
+// Remove obsolete mailbox listeners and metadata on upgrade.
 async function removeLegacyMailAssist(){
   if(chrome.scripting?.getRegisteredContentScripts){
     const scripts=await chrome.scripting.getRegisteredContentScripts();
@@ -120,7 +120,7 @@ async function finish(id,status,reason){
   const attached=state.active;
   state.active=false;state.status=status;state.reason=reason;state.finishedAt=new Date().toISOString();
   if(status==='failed'){const person=state.applicants?.find(person=>person.id===state.current);if(person)person.status='failed';}
-  clearTimeout(state.timeout);clearTimeout(state.settle);clearTimeout(state.verificationTimer);state.pending.clear();
+  clearTimeout(state.timeout);clearTimeout(state.settle);clearTimeout(state.verificationTimer);if(state.rawCapture)state.rawCapture.interrupted+=state.pending.size;state.pending.clear();
   if(attached){try{await chrome.debugger.detach({tabId:id});}catch(error){state.errors.push(error.message);}}
   if(status==='completed' && !state.comparisonRecorded){
     state.comparisonRecorded=true;
@@ -137,7 +137,7 @@ async function begin(id,status='capturing',profileId){
     if(owner)await chrome.storage.session.set({['capture:profile:'+owner.id]:saved.profileId?saved:{...saved,profileId:owner.id}});
   }
   const profile=(configured.applications || []).find(item=>item.id===(profileId || configured.selectedApplicationId));
-  const state={profileId:profile?.id,profileNumber:profile?.applicationNumber,profileVerified:false,previous:saved?{application:saved.application,applicants:saved.applicants}:null,domain:{},pageScopes:new Map(),active:false,status,startedAt:new Date().toISOString(),responses:[],pending:new Map(),reading:0,requestScopes:new Map(),applicants:[],application:{},phase:'overview',errors:[]};
+  const state={profileId:profile?.id,profileNumber:profile?.applicationNumber,profileVerified:false,previous:saved?{application:saved.application,applicants:saved.applicants}:null,domain:{},pageScopes:new Map(),active:false,status,startedAt:new Date().toISOString(),responses:[],pending:new Map(),reading:0,requestScopes:new Map(),applicants:[],application:{},phase:'overview',errors:[],rawCapture:{version:1,captured:0,oversized:0,invalidJson:0,readFailed:0,requestFailed:0,evicted:0,interrupted:0}};
   if(profile && saved?.status==='completed' && ownsProfile(saved,profile,configured.applications))state.comparisonBaseline=comparisonSnapshot(saved);
   sessions.set(id,state);
   try{
@@ -610,17 +610,17 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
   if (!state?.active) return;
   if(method==='Network.requestWillBeSent'){
     state.requestScopes.set(params.requestId,requestRelation(params.request));
-    try{const page=new URL(params.documentURL || '');state.pageScopes.set(params.requestId,page.origin===new URL(params.request.url).origin?page.pathname:'');}catch{}
+    try{const page=new URL(params.documentURL || '');state.pageScopes.set(params.requestId,page.origin===new URL(params.request.url).origin?page.href:'');}catch{}
   }
   if (method === 'Network.responseReceived') {
     const r = params.response;
     if (/ast-otp-verification/.test(state.pageScopes.get(params.requestId) || ''))return;
     if (allowed(r.url) && !/otp|verification|verify|authenticate|token/i.test(new URL(r.url).pathname) && (['XHR','Fetch'].includes(params.type) || /json/i.test(r.mimeType))) {
-      state.pending.set(params.requestId, {url:r.url.split('?')[0], status:r.status,requestRelationId:state.requestScopes.get(params.requestId) || null,page:state.pageScopes.get(params.requestId) || ''});
+      state.pending.set(params.requestId, {url:r.url, status:r.status,requestRelationId:state.requestScopes.get(params.requestId) || null,page:state.pageScopes.get(params.requestId) || ''});
     }
   }
   if (method === 'Network.loadingFailed'){
-    if(state.pending.has(params.requestId))state.errors.push('请求未完成：'+(params.errorText || '网络错误'));
+    if(state.pending.has(params.requestId)){state.rawCapture.requestFailed++;state.errors.push('请求未完成：'+(params.errorText || '网络错误'));await publish(source.tabId,state);}
     state.pending.delete(params.requestId);
   }
   if (method !== 'Network.loadingFinished') return;
@@ -631,22 +631,22 @@ chrome.debugger.onEvent.addListener(async (source, method, params) => {
   try {
     const body = await chrome.debugger.sendCommand(source, 'Network.getResponseBody', {requestId:params.requestId});
     const raw = body.base64Encoded ? new TextDecoder().decode(Uint8Array.from(atob(body.body), c=>c.charCodeAt(0))) : body.body;
-    if(!state.active)return;
+    if(!state.active){state.rawCapture.interrupted++;await publish(source.tabId,state);return;}
     if(metadata.status===401 || metadata.status===403){await finish(source.tabId,'failed','登录或授权已失效（HTTP '+metadata.status+'），已自动停止。请回到 Tracker 检查。');return;}
     let json;
-    try { json=JSON.parse(raw); } catch { return; }
-    if (raw.length > 5000000) { state.errors.push('Skipped response larger than 5 MB'); return; }
-    json=redactPrivateFields(json);
+    if (raw.length > 5000000) { state.rawCapture.oversized++;state.errors.push('Skipped response larger than capture limit');await publish(source.tabId,state);return; }
+    try { json=JSON.parse(raw); } catch { state.rawCapture.invalidJson++;await publish(source.tabId,state);return; }
     const matches=findFields(json);
     const records=applicantPayloads(json);
-    state.responses.push({...metadata,relationId:responseOwner(metadata.requestRelationId,json),capturedAt:new Date().toISOString(),matches,json});
+    state.rawCapture.captured++;
+    state.responses.push({...metadata,relationId:responseOwner(metadata.requestRelationId,json),capturedAt:new Date().toISOString(),matches,raw,json});
     for(const record of records)state.domain[record.relationId]=mergePayload(state.domain[record.relationId],record);
     syncDomain(state);
     state.requestScopes.delete(params.requestId);
-    if(state.responses.length>100) state.responses.shift();
+    if(state.responses.length>100){state.responses.shift();state.rawCapture.evicted++;}
     await publish(source.tabId,state);
     if(state.status==='capturing')await completeIfReady(source.tabId,state);
-  } catch(e) { state.errors.push(`${metadata.url}: ${e.message}`); if(state.errors.length>50)state.errors.shift();await publish(source.tabId,state); }
+  } catch(e) { state.rawCapture.readFailed++;state.errors.push(`${metadata.url}: ${e.message}`); if(state.errors.length>50)state.errors.shift();await publish(source.tabId,state); }
   finally{state.reading--;}
 });
 chrome.debugger.onDetach.addListener(source => { const state=sessions.get(source.tabId); if(state?.active)void finish(source.tabId,'failed','查询连接已断开，请重新查询。'); });

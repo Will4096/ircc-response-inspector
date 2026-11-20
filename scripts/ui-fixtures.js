@@ -16,9 +16,14 @@
   if(stage!=='results' || empty)capture={active:false,status:'idle',application:{},applicants:[],responses:[]};
   if(countdown)capture.status='countdown';
   if(stage==='failed'){stage='results';capture={...capture,status:'failed',reason:'查询连接已断开，请重新查询。'};}
+  if(query.has('exportPreview')){
+    capture.rawCapture={version:1,captured:3,oversized:0,invalidJson:0,readFailed:0,requestFailed:0,evicted:2,interrupted:0};
+    for(const record of capture.responses)record.raw=JSON.stringify(record.json,null,2);
+    window.addEventListener('load',()=>setTimeout(()=>void window.RawExport?.open('demo-a'),500));
+  }
   const nativeReady=mail!=='error'&&mail!=='version';window.__helperChecks=0;window.__helperHealthState=query.get('health')||(mail==='version'?'upgrade':nativeReady?'ready':'unavailable');let configured=!!mail,verifiedAt=mail?Date.now():null;
   const changes=value=>{const changed={};for(const [key,newValue] of Object.entries(value))changed[key]={oldValue:data[key],newValue};Object.assign(data,value);for(const fn of listeners)fn(changed,'local');};
-  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'4.3.2'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
+  window.chrome={extension:{getViews:()=>query.get('surface')==='popup'?[window]:[]},storage:{session:{get:async()=>({'capture:profile:demo-a':{...capture,profileId:'demo-a'}})},local:{get:async key=>key===null?{...data}:Object.fromEntries((Array.isArray(key)?key:[key]).filter(k=>k in data).map(k=>[k,data[k]])),set:async value=>changes(value)},onChanged:{addListener:fn=>listeners.push(fn)}},permissions:{contains:async()=>authGranted,request:async value=>{if(value.origins?.includes('https://gc.auth.canada.ca/*')){if(query.has('denyAuth'))return false;authGranted=true;stage='login';}return true;}},runtime:{id:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',getManifest:()=>({version:'4.3.3'}),getURL:path=>path,openOptionsPage:async()=>{location.href='settings.html';},sendMessage:async message=>{
     switch(message.action){
       case 'armSearchSubmit':if(!autoPending||autoPending.id!==message.submissionId)return {cancelled:true};if(autoPending.phase==='awaiting'){autoPending={...autoPending,phase:'armed',viewId:message.viewId,deadline:Date.now()+5000};}return {pending:{...autoPending}};
       case 'cancelSearchSubmit':autoPending=null;capture.status='ready';return {cancelled:true};

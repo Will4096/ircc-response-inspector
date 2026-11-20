@@ -1,4 +1,4 @@
-// Versioned, password-encrypted backups. No mailbox settings, secrets or tab sessions.
+// Versioned, password-encrypted backups. No mailbox settings or tab sessions; captured responses are preserved.
 var Backup={
   clean(input){
     if(input?.format!=='ircc-local-data'||input.version!==1||!Array.isArray(input.applications)||input.applications.length>100)throw Error('backup.format');
@@ -15,10 +15,10 @@ var Backup={
       const matches=value=>!value?.application?.number||normalizeApplicationNumber(value.application.number)===normalizeApplicationNumber(p.applicationNumber);
       if(capture){
         if(capture.profileId!==p.id||!matches(capture)||!Array.isArray(capture.applicants)||!Array.isArray(capture.responses))throw Error('backup.format');
-        const safe={};for(const key of ['schemaVersion','profileId','application','applicants','responses','errors','comparison','finishedAt','startedAt'])if(capture[key]!==undefined)safe[key]=capture[key];
-        captures[p.id]=redactPrivateFields({...safe,active:false,status:typeof capture.status==='string'?capture.status:'idle'});
+        const safe={};for(const key of ['schemaVersion','profileId','application','applicants','responses','errors','comparison','finishedAt','startedAt','rawCapture'])if(capture[key]!==undefined)safe[key]=capture[key];
+        captures[p.id]={...safe,active:false,status:typeof capture.status==='string'?capture.status:'idle'};
       }
-      if(baseline){if(baseline.profileId!==p.id||!Array.isArray(baseline.applicants)||!matches(baseline))throw Error('backup.format');comparisons[p.id]=redactPrivateFields(baseline);}
+      if(baseline){if(baseline.profileId!==p.id||!Array.isArray(baseline.applicants)||!matches(baseline))throw Error('backup.format');comparisons[p.id]=baseline;}
     }
     return {format:'ircc-local-data',version:1,applications,selectedApplicationId:ids.has(input.selectedApplicationId)?input.selectedApplicationId:applications[0]?.id||'',uiLanguage:input.uiLanguage==='en'?'en':'zh',autoFill:!!input.autoFill,captures,comparisons};
   },
@@ -92,12 +92,15 @@ var DataTransferCore={
     const latest=candidates[0];if(!latest||!latest.responses?.length)throw Error('transfer.empty');
     // Export response records only: no form profile, preferences, baselines or mailbox state.
     const responses=latest.responses.map(record=>{
-      const safe={};for(const key of ['url','page','relationId','capturedAt','status','mimeType','json'])if(record[key]!==undefined)safe[key]=record[key];
-      for(const key of ['url','page'])if(typeof safe[key]==='string')safe[key]=redactResponseUrl(safe[key]);
-      return redactPrivateFields(safe);
+      const safe={};for(const key of ['url','page','relationId','capturedAt','status','mimeType','raw','json'])if(record[key]!==undefined)safe[key]=record[key];
+      return safe;
     });
-    return {format:'ircc-raw-query',version:1,exportedAt:new Date().toISOString(),profileId,query:{startedAt:latest.startedAt||null,finishedAt:latest.finishedAt||null,status:latest.status||'unknown',active:!!latest.active},responses};
+    const counters=latest.rawCapture?.version===1?latest.rawCapture:null;
+    const omitted=counters?['oversized','invalidJson','readFailed','requestFailed','evicted','interrupted'].reduce((sum,key)=>sum+(Number(counters[key])||0),0):null;
+    const missingOriginalText=responses.filter(record=>typeof record.raw!=='string').length;
+    const integrity={scope:'captured-query-responses',state:latest.active||latest.status!=='completed'||omitted>0?'partial':!counters||missingOriginalText?'unknown':'captured',counters:counters?{...counters}:null,missingOriginalText,limits:{maxResponses:100,maxResponseCharacters:5000000},originalTextField:'raw'};
+    return {format:'ircc-raw-query',version:1,integrity,exportedAt:new Date().toISOString(),profileId,query:{startedAt:latest.startedAt||null,finishedAt:latest.finishedAt||null,status:latest.status||'unknown',active:!!latest.active},responses};
   },
-  async encryptRaw(input,password){if(input?.format!=='ircc-raw-query'||input.version!==1||!Array.isArray(input.responses))throw Error('backup.format');return this.seal(redactPrivateFields(input),password,'ircc-encrypted-query');},
-  async decryptRaw(text,password){const data=await this.open(text,password,'ircc-encrypted-query');if(data?.format!=='ircc-raw-query'||data.version!==1||!Array.isArray(data.responses))throw Error('backup.format');return redactPrivateFields(data);}
+  async encryptRaw(input,password){if(input?.format!=='ircc-raw-query'||input.version!==1||!Array.isArray(input.responses))throw Error('backup.format');return this.seal(input,password,'ircc-encrypted-query');},
+  async decryptRaw(text,password){const data=await this.open(text,password,'ircc-encrypted-query');if(data?.format!=='ircc-raw-query'||data.version!==1||!Array.isArray(data.responses))throw Error('backup.format');return data;}
 };
